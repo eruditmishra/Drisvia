@@ -1,7 +1,9 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
+import cors from "cors";
 import rateLimit from "express-rate-limit";
+import { config } from "./shared/config";
 import authRoutes from "./modules/auth/auth.routes";
 // import agentRoutes from "./modules/agents/agents.routes";
 import trustRoutes from "./modules/trust/trust.routes";
@@ -19,7 +21,41 @@ import {
 import { systemAccessLogMiddleware } from "./shared/middleware/auditAccess.middleware";
 
 const app = express();
-app.use(helmet());
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests (mobile apps, server-to-server, curl)
+    if (!origin) {
+      return callback(null, true);
+    }
+    const normalized = origin.trim().replace(/\/+$/, "");
+    if (config.corsOrigins.includes(normalized)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "Cache-Control",
+    "X-XSRF-TOKEN",
+  ],
+  exposedHeaders: ["Set-Cookie"],
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.text({ type: "text/plain" })); // for sendBeacon pageview payloads
 app.use(cookieParser());

@@ -5,6 +5,25 @@ export const config = {
   // offering. Treated as `null` everywhere downstream, never a required value.
   tenantId: process.env.TENANT_ID ? process.env.TENANT_ID : null,
   secureCookies: process.env.SECURE_COOKIES !== 'false' && (process.env.NODE_ENV === 'production'),
+  corsOrigins: Array.from(
+    new Set(
+      [
+        "https://drisvia.apnto.com",
+        ...(process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : []),
+        ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(",") : []),
+        ...(process.env.NODE_ENV !== "production"
+          ? [
+              "http://localhost:5173",
+              "http://localhost:3000",
+              "http://127.0.0.1:5173",
+              "http://127.0.0.1:3000",
+            ]
+          : []),
+      ]
+        .map((origin) => origin.trim().replace(/\/+$/, ""))
+        .filter(Boolean),
+    ),
+  ),
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET!,
     refreshSecret: process.env.JWT_REFRESH_SECRET!,
