@@ -1,0 +1,23 @@
+<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="drisvia-l" x1="4" y1="36" x2="20" y2="4" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0066FF"/>
+      <stop offset="100%" stop-color="#38BDF8"/>
+    </linearGradient>
+    <linearGradient id="drisvia-r" x1="20" y1="4" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="50%" stop-color="#0062FF"/>
+      <stop offset="100%" stop-color="#004AD7"/>
+    </linearGradient>
+  </defs>
+  <!-- Left arch leg -->
+  <path 
+    d="M6 34.5C5.17 34.5 4.6 33.6 5.0 32.8L16.2 6.5C16.8 5.1 18.2 4.2 19.8 4.2C21.4 4.2 22.8 5.1 23.4 6.5L34.6 32.8C35.0 33.6 34.4 34.5 33.6 34.5H28.4C27.4 34.5 26.5 33.9 26.1 33.0L20.8 20.5C20.4 19.6 19.2 19.6 18.8 20.5L13.5 33.0C13.1 33.9 12.2 34.5 11.2 34.5H6Z" 
+    fill="url(#drisvia-l)"
+  />
+  <!-- Inner cross loop -->
+  <path 
+    d="M12.5 24C15 22.5 24.5 22.5 27 24C28 24.6 28.5 25.8 27.5 26.8C25.5 28.8 14.5 28.8 12.5 26.8C11.5 25.8 11.5 24.6 12.5 24Z" 
+    fill="url(#drisvia-r)"
+  />
+</svg>
