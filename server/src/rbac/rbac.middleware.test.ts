@@ -9,7 +9,7 @@ import {
 import { UnauthorizedError, ForbiddenError } from "../shared/errors";
 import { AccessTokenPayload } from "../modules/auth/auth.types";
 
-function mockRequest(user?: Partial<AccessTokenPayload>) {
+function mockRequest(user?: Partial<AccessTokenPayload> & { id?: string }) {
   return {
     user,
   } as any;

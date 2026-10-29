@@ -2,11 +2,11 @@
   "name": "drisvia",
   "version": "0.1.0",
   "description": "AI agent discovery and governance platform",
-  "main": "index.js",
+  "main": "dist/src/index.js",
   "type": "commonjs",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-js-assets.cjs",
-    "start": "node dist/index.js",
+    "start": "node dist/src/index.js",
     "lint": "eslint src --ext .ts",
     "dev": "nodemon -L --watch src --ext ts,json --exec \"tsx src/index.ts\"",
     "lint:fix": "eslint src --ext .ts --fix",

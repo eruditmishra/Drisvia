@@ -1,0 +1,58 @@
+services:
+  drisvia:
+    image: ${DRISVIA_IMAGE:?Set DRISVIA_IMAGE}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      CORS_ORIGIN: https://drisvia.apnto.com
+    env_file:
+      - /opt/drisvia/server/.env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - drisvia_logs:/app/logs
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    networks:
+      - drisvia_private
+
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - drisvia_private
+
+volumes:
+  pgdata:
+    external: true
+    name: ${PGDATA_VOLUME:?Set PGDATA_VOLUME to your existing PostgreSQL volume}
+  drisvia_logs:
+
+networks:
+  drisvia_private:
+    driver: bridge

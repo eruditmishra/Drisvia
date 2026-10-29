@@ -1,5 +1,37 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Secrets and environment files
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+**/*.pem
+**/*.key
+
+# Git and generated output
+.git
+.github
+**/coverage
+**/dist
+**/.vite
+**/.cache
+
+# Logs and local artifacts
+*.log
+logs
+tmp
+temp
+
+# Frontend generated files
+dashboard/dist
+
+
 node_modules
 dist
 .git
 .env
 scratch
+Drisvia_Technical_Due_Diligence_and_Codebase_Audit.docx

@@ -157,7 +157,7 @@ describe("Adversarial Red-Teaming Inventory Surface Engine", () => {
       const tool = tools[0];
       expect(tool.name).toBe("generate_invoice");
       expect(tool.permissions).toContain("invoke:arn:aws:lambda:us-east-1:123:function:billing");
-      expect(tool.parameters_schema?.properties.customerId.required).toBe(true);
+      expect((tool.parameters_schema as any)?.properties.customerId.required).toBe(true);
       expect(tool.risk_flags.can_access_pii).toBe(true); // 'email' in desc
       expect(tool.risk_flags.can_modify_state).toBe(true); // 'create' in desc
     });
