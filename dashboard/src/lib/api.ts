@@ -114,10 +114,13 @@ export const authAPI = {
 
 export const dashboardAPI = {
   getStats: () => api.get("/dashboard/stats"),
+  getSecurityPosture: (params?: { period?: string; environment?: string }) =>
+    api.get<import("../types/dashboard").PostureDashboardData>("/dashboard/posture", { params }),
   getShadowStats: () => api.get("/dashboard/shadow-stats"),
   getModelStats: () => api.get("/dashboard/model-stats"),
   getVerifiedStats: () => api.get("/dashboard/verified-stats"),
 };
+
 
 export const discoveryAPI = {
   startScan: (integration_ids?: string[], scan_all?: boolean) => api.post<{ scanId: string }>("/discovery/scans", { integration_ids, scan_all }),
