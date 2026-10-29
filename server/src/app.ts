@@ -70,18 +70,63 @@ const apiLimiter = rateLimit({
   limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, error: "Too many requests. Please try again later." },
+  message: {
+    success: false,
+    error: "Too many requests. Please try again later.",
+  },
 });
 app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 // app.use("/api/agents", requireAuth, attachTenant, requireMfaVerified(), agentRoutes);
-app.use("/api/trust", requireAuth, attachTenant, requireMfaVerified(), trustRoutes);
-app.use("/api/discovery", requireAuth, attachTenant, requireMfaVerified(), discoveryRoutes);
-app.use("/api/integrations", requireAuth, attachTenant, requireMfaVerified(), integrationsRoutes);
-app.use("/api/audit", requireAuth, attachTenant, requireMfaVerified(), auditRoutes);
-app.use("/api/dashboard", requireAuth, attachTenant, requireMfaVerified(), dashboardRoutes);
-app.use("/api/users", requireAuth, attachTenant, requireMfaVerified(), usersRoutes);
+app.use(
+  "/api/trust",
+  requireAuth,
+  attachTenant,
+  requireMfaVerified(),
+  trustRoutes,
+);
+app.use(
+  "/api/discovery",
+  requireAuth,
+  attachTenant,
+  requireMfaVerified(),
+  discoveryRoutes,
+);
+app.use(
+  "/api/integrations",
+  requireAuth,
+  attachTenant,
+  requireMfaVerified(),
+  integrationsRoutes,
+);
+app.use(
+  "/api/audit",
+  requireAuth,
+  attachTenant,
+  requireMfaVerified(),
+  auditRoutes,
+);
+app.use(
+  "/api/dashboard",
+  requireAuth,
+  attachTenant,
+  requireMfaVerified(),
+  dashboardRoutes,
+);
+app.use(
+  "/api/users",
+  requireAuth,
+  attachTenant,
+  requireMfaVerified(),
+  usersRoutes,
+);
+app.get("/health", (_req, res) => {
+  res.status(200).json({
+    status: "ok",
+    service: "drisvia-api",
+  });
+});
 
 app.use(notFoundHandler);
 app.use(errorHandler);
