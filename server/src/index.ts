@@ -7,14 +7,14 @@ registerProcessErrorHandlers();
 
 const PORT = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, () => {
-  logger.info(`Drisvia listening on port ${PORT}`);
-  startScheduler();
-});
-
 app.get("/health", (_req, res) => {
   res.status(200).json({
     status: "ok",
     service: "drisvia-api",
   });
+});
+
+app.listen(PORT, () => {
+  logger.info(`Drisvia listening on port ${PORT}`);
+  startScheduler();
 });
