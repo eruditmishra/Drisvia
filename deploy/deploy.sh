@@ -21,6 +21,7 @@ PREVIOUS_RELEASE_FILE="$BASE/.previous-release"
 
 COMPOSE=(
   docker compose
+  -p drisvia
   --env-file "$ENV_FILE"
   -f "$COMPOSE_FILE"
 )

@@ -26,7 +26,7 @@ services:
       retries: 5
       start_period: 40s
     networks:
-      - drisvia_private
+      - default
 
   db:
     image: postgres:15-alpine
@@ -45,14 +45,17 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - drisvia_private
+      - default
 
 volumes:
   pgdata:
     external: true
     name: ${PGDATA_VOLUME:?Set PGDATA_VOLUME to your existing PostgreSQL volume}
+
   drisvia_logs:
+    external: true
+    name: drisvia_logs_volume
 
 networks:
-  drisvia_private:
-    driver: bridge
+  default:
+    name: drisvia_default
