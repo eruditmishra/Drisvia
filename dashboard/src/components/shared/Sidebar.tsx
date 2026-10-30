@@ -30,10 +30,10 @@ export default function Sidebar() {
   const canViewShadowAgents = usePermission("shadow_agents", "view");
   const canViewVerifiedAgents = usePermission("verified_agents", "view");
   const canViewModels = usePermission("models", "view");
-  const canViewScans =
-    usePermission("auto_discovery_config", "view") ||
-    usePermission("scanning", "view") ||
-    usePermission("discovery_results", "view");
+  const canViewAutoScanPerm = usePermission("auto_discovery_config", "view");
+  const canViewScanningPerm = usePermission("scanning", "view");
+  const canViewResultsPerm = usePermission("discovery_results", "view");
+  const canViewScans = canViewAutoScanPerm || canViewScanningPerm || canViewResultsPerm;
   const canViewCompliance = usePermission("assessments", "view");
   const canViewIntegrations = usePermission("integrations", "view");
   const canViewUsers = usePermission("user_management", "view");

@@ -526,7 +526,7 @@ async function runConnectorScan(
   scanId: string,
   connector: CloudConnectorWithSecrets,
   tenantId: string | null,
-): Promise<{ agentsFound: number; errorCount: number }> {
+): Promise<{ agentsFound: number; newAgentsFound: number; errorCount: number }> {
   await repo.updateScanIntegrationStatus(scanId, connector.id, "running");
   await repo.createScanLog(
     scanId,
