@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
+import { Fingerprint, ArrowLeft } from "lucide-react";
 import { discoveryAPI } from "../../lib/api";
 import type { DiscoveredAgent, AgentFilters } from "../../types/discovery";
-import AgentsFilterBar from "../../components/super_admin/agents/AgentsFilterBar";
-import AgentsTable from "../../components/super_admin/agents/AgentsTable";
+import IdentitiesFilterBar from "../../components/super_admin/identities/IdentitiesFilterBar";
+import IdentitiesTable from "../../components/super_admin/identities/IdentitiesTable";
 import Pagination from "../../components/super_admin/agents/Pagination";
 import UpdateAgentStatusModal from "../../components/super_admin/agents/UpdateAgentStatusModal";
 import StatCard from "../../components/shared/StatCard";
@@ -37,10 +38,7 @@ export default function AgentIdentities() {
   // Extract state from URL
   const activeFilters = {
     search: searchParams.get("search") || "",
-    model: searchParams.get("model") || "",
     provider: searchParams.get("provider") || "",
-    owner: searchParams.get("owner") || "",
-    type: searchParams.get("type") || "",
     status: searchParams.get("status") || "",
   };
   const sortBy = searchParams.get("sortBy") || "created_at";
@@ -77,7 +75,9 @@ export default function AgentIdentities() {
     setLoading(true);
     discoveryAPI
       .getAgents({
-        ...activeFilters,
+        search: activeFilters.search,
+        provider: activeFilters.provider,
+        status: activeFilters.status,
         hasModel: false, // Only modelless records — pure Entra identities / service principals
         sortBy,
         sortOrder,
@@ -96,7 +96,6 @@ export default function AgentIdentities() {
   }, [searchParams]);
 
   const handleFilterChange = (key: string, value: string) => {
-    if (key === "type") return; // Always locked to identity
     const newParams = new URLSearchParams(searchParams);
     if (value) newParams.set(key, value);
     else newParams.delete(key);
@@ -154,17 +153,26 @@ export default function AgentIdentities() {
 
   return (
     <div className="p-6 flex flex-col h-full overflow-y-auto animate-view-in">
-      <div className="mb-4">
-        <h1 className="text-[20px] font-display font-bold text-text-primary tracking-tight select-none flex items-center gap-2">
-          <div className="w-1.5 h-5 bg-purple-500 rounded-full"></div>
+      {/* ── Page Header ── */}
+      <div className="mb-5">
+        <div className="flex items-center gap-2 mb-1 text-[11px] font-semibold text-slate-400">
+          <Link to="/agents" className="hover:text-blue-600 transition-colors flex items-center gap-1">
+            <ArrowLeft size={12} /> Agents
+          </Link>
+          <span>/</span>
+          <span className="text-slate-600">Identities</span>
+        </div>
+        <h1 className="text-[22px] font-display font-extrabold text-slate-900 tracking-tight select-none flex items-center gap-2.5">
+          <div className="w-1.5 h-5 bg-purple-600 rounded-full"></div>
           Agent Identities
         </h1>
-        <p className="text-[12px] text-text-muted mt-1 ml-4">
-          Azure Entra service principals and managed identities registered for agents —
-          distinct from the agent workloads themselves.
+        <p className="text-[13px] text-slate-500 mt-1 ml-4 leading-relaxed max-w-4xl">
+          Microsoft Entra service principals, managed identities, and app registrations assigned to AI agent workloads.
+          Identities govern autonomous execution scopes, delegated credentials, and tool permissions across your estate.
         </p>
       </div>
 
+      {/* ── Stat Cards ── */}
       {identityStats && (
         <div className="grid grid-cols-3 gap-4 mb-4 shrink-0">
           <StatCard
@@ -172,43 +180,51 @@ export default function AgentIdentities() {
             label="TOTAL IDENTITIES"
             value={identityStats.total}
             sub="All discovered agent identities"
+            onClick={() => handleFilterChange("status", "")}
           />
           <StatCard
             color="amber"
             label="UNREVIEWED"
             value={identityStats.shadow}
-            sub="Shadow or flagged identities"
+            sub="Shadow or unreviewed identities"
+            onClick={() => handleFilterChange("status", "shadow")}
           />
           <StatCard
             color="green"
             label="APPROVED"
             value={identityStats.approved}
             sub="Verified agent identities"
+            onClick={() => handleFilterChange("status", "approved")}
           />
         </div>
       )}
 
-      {/* Info callout */}
-      <div className="mb-4 flex items-start gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 text-[12px] text-purple-800">
-        <svg className="w-4 h-4 mt-0.5 shrink-0 text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20A10 10 0 0012 2z" />
-        </svg>
-        <span>
-          These are <strong>agent identity registrations</strong> (Entra App Registrations, Managed Identities)
-          associated with AI workloads discovered on Azure. They are <strong>not agent workloads themselves</strong> — see{" "}
-          <a href="/agents" className="underline font-semibold text-purple-700 hover:text-purple-900">Discovered Agents</a> for actual AI agent instances.
-        </span>
+      {/* ── Information Callout ── */}
+      <div className="mb-4 flex items-start gap-3 bg-purple-50/80 border border-purple-200/80 rounded-xl px-4 py-3 text-[12.5px] text-purple-900 shadow-xs">
+        <Fingerprint className="w-4 h-4 mt-0.5 shrink-0 text-purple-600" />
+        <div className="leading-relaxed">
+          <strong>Agent Identity Registrations</strong> (Entra App Registrations, Managed Identities) represent
+          autonomous identities credentialed to execute tools and access APIs. They are{" "}
+          <strong>distinct from agent workloads</strong> — see{" "}
+          <Link to="/agents" className="underline font-semibold text-purple-700 hover:text-purple-900">
+            All Agents
+          </Link>{" "}
+          for active AI model instances and runtime workloads.
+        </div>
       </div>
 
-      <AgentsFilterBar
-        filters={{ ...filterOptions, types: [], statuses: [] }}
-        activeFilters={{ ...activeFilters, type: "" }}
+      {/* ── Filters Bar ── */}
+      <IdentitiesFilterBar
+        providers={filterOptions.providers}
+        statuses={filterOptions.statuses}
+        activeFilters={activeFilters}
         onChange={handleFilterChange}
         onClear={handleClearFilters}
       />
 
+      {/* ── Table & Loading States ── */}
       {loading && agents.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex-1 flex items-center justify-center py-20">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
         </div>
       ) : (
@@ -218,7 +234,7 @@ export default function AgentIdentities() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand"></div>
             </div>
           )}
-          <AgentsTable
+          <IdentitiesTable
             agents={agents}
             sortBy={sortBy}
             sortOrder={sortOrder}
@@ -237,6 +253,7 @@ export default function AgentIdentities() {
         </div>
       )}
 
+      {/* ── Update Status Modal ── */}
       <UpdateAgentStatusModal
         isOpen={isModalOpen}
         agent={selectedAgent}
