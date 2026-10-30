@@ -89,7 +89,7 @@ export default function Dashboard() {
   if (!data) return null;
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full overflow-y-auto bg-[#F8FAFC] custom-scrollbar">
+    <div className="px-8 pb-8 pt-3 flex flex-col gap-6 h-full overflow-y-auto bg-[#F8FAFC] custom-scrollbar">
       {/* ── Page Header ── */}
       <div className="flex flex-col">
         <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">

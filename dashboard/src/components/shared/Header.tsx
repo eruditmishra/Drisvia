@@ -124,7 +124,7 @@ export default function Header() {
   const userInitial = displayName.charAt(0).toUpperCase();
 
   return (
-    <header className="bg-white border-b border-slate-200/90 px-8 py-3 flex items-center justify-between relative z-20 shrink-0">
+    <header className="bg-[#F8FAFC] px-8 pt-5 pb-2 flex items-center justify-between relative z-20 shrink-0">
       {/* ── Scan Progress Line (Top edge) ── */}
       {scanStatus === "running" && (
         <div className="absolute top-0 left-0 right-0 h-[3px] bg-[#EAF2FF] overflow-hidden z-30">
@@ -149,7 +149,7 @@ export default function Header() {
         <div className="relative mt-0.5">
           <button
             onClick={() => setOrgDropdownOpen(!orgDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 shadow-xs hover:border-slate-300 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors cursor-pointer"
           >
             <span>{organization}</span>
             <ChevronDown size={13} className="text-slate-400" />
@@ -196,7 +196,7 @@ export default function Header() {
         <div className="relative" ref={periodRef}>
           <button
             onClick={() => setPeriodDropdownOpen(!periodDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors cursor-pointer"
           >
             <Calendar size={13} className="text-slate-500" />
             <span>{periodLabels[period] || "Last 30 days"}</span>
@@ -227,7 +227,7 @@ export default function Header() {
         <div className="relative" ref={envRef}>
           <button
             onClick={() => setEnvDropdownOpen(!envDropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-xs hover:border-slate-300 transition-colors cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-1.5 bg-white border border-slate-200/90 rounded-xl text-xs font-semibold text-slate-700 shadow-[0_1px_2px_rgba(0,0,0,0.03)] hover:border-slate-300 transition-colors cursor-pointer"
           >
             <span>{envLabels[environment] || "All Environments"}</span>
             <ChevronDown size={13} className="text-slate-400" />
@@ -255,18 +255,18 @@ export default function Header() {
 
         {/* Notification Bell */}
         <button
-          className="relative w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100/70 transition-colors cursor-pointer"
+          className="relative w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-white/80 transition-colors cursor-pointer"
           aria-label="Notifications"
         >
           <Bell size={16} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white" />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-[#F8FAFC]" />
         </button>
 
         {/* User Profile Pill with Avatar */}
         <div className="relative ml-1" ref={userRef}>
           <button
             onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-            className="flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+            className="flex items-center gap-2.5 pl-1.5 pr-2 py-1 rounded-full hover:bg-white/80 transition-colors cursor-pointer"
           >
             <div className="w-8 h-8 rounded-full bg-[#2563EB] text-white flex items-center justify-center font-bold text-xs shadow-xs">
               {userInitial}
