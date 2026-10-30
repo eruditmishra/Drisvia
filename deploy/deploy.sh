@@ -88,6 +88,19 @@ DRISVIA_IMAGE="$IMAGE" "${COMPOSE[@]}" pull drisvia
 ln -s "$RELEASE" "$WEB_ROOT/current.next"
 mv -Tf "$WEB_ROOT/current.next" "$CURRENT"
 
+# Gracefully reload Nginx to pick up the new frontend release
+if ! nginx -t; then
+    echo "Nginx configuration validation failed."
+    restore_previous
+    exit 1
+fi
+
+if ! sudo systemctl reload nginx; then
+    echo "Nginx reload failed."
+    restore_previous
+    exit 1
+fi
+
 restore_previous() {
   echo "Deployment failed. Restoring previous release..."
 
