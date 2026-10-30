@@ -3,11 +3,18 @@ import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutGrid,
   Bot,
+  List,
+  Ghost,
+  ShieldCheck,
   Box,
   Radar,
+  FileCheck,
   Share2,
-  Users,
+  Fingerprint,
+  UserCheck,
+  KeyRound,
   Settings,
+  RefreshCw,
   FileText,
   ChevronDown,
   ArrowRight,
@@ -23,25 +30,31 @@ export default function Sidebar() {
   const canViewShadowAgents = usePermission("shadow_agents", "view");
   const canViewVerifiedAgents = usePermission("verified_agents", "view");
   const canViewModels = usePermission("models", "view");
-  const canViewAssessments = usePermission("assessments", "view");
+  const canViewScans =
+    usePermission("auto_discovery_config", "view") ||
+    usePermission("scanning", "view") ||
+    usePermission("discovery_results", "view");
+  const canViewCompliance = usePermission("assessments", "view");
   const canViewIntegrations = usePermission("integrations", "view");
   const canViewUsers = usePermission("user_management", "view");
   const canViewSso = usePermission("sso_config", "view");
   const canViewAutoDiscovery = usePermission("auto_discovery_config", "view");
   const canViewAuditLogs = usePermission("agent_audit_logs", "view");
 
-  const canViewAnyAgents = canViewAgents || canViewShadowAgents || canViewVerifiedAgents;
+  const canViewAnyAgents =
+    canViewAgents || canViewShadowAgents || canViewVerifiedAgents;
   const canViewIam = canViewUsers || canViewSso;
   const canViewSettings = canViewAutoDiscovery;
 
   // ── Accordion State: sub-options toggle on clicking main option ──
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => ({
     agents: location.pathname.startsWith("/agents"),
-    scans: location.pathname.startsWith("/assessments"),
     iam:
       location.pathname.startsWith("/user-management") ||
       location.pathname.startsWith("/sso"),
-    settings: location.pathname.startsWith("/auto-discovery"),
+    settings:
+      location.pathname.startsWith("/auto-discovery") ||
+      location.pathname.startsWith("/settings"),
   }));
 
   const toggleMenu = (key: string) => {
@@ -74,16 +87,17 @@ export default function Sidebar() {
     `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12.5px] transition-all duration-150 group ${
       isActive
         ? "bg-[#EAF2FF] text-[#2563EB] font-bold"
-        : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/80 font-medium"
+        : "text-slate-600 hover:text-slate-900 hover:bg-slate-50/80 font-medium"
     }`;
 
   // ── Active group indicators ──
   const isAgentsActive = location.pathname.startsWith("/agents");
-  const isScansActive = location.pathname.startsWith("/assessments");
   const isIamActive =
     location.pathname.startsWith("/user-management") ||
     location.pathname.startsWith("/sso");
-  const isSettingsActive = location.pathname.startsWith("/auto-discovery");
+  const isSettingsActive =
+    location.pathname.startsWith("/auto-discovery") ||
+    location.pathname.startsWith("/settings");
 
   return (
     <aside className="w-[230px] min-w-[230px] h-screen flex flex-col bg-[#F2F9FD] relative z-10 shrink-0 select-none">
@@ -153,14 +167,19 @@ export default function Sidebar() {
                     end
                     className={({ isActive }) => subNavClass(isActive)}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                        location.pathname === "/agents"
-                          ? "bg-[#2563EB]"
-                          : "bg-slate-300 group-hover:bg-slate-400"
-                      }`}
-                    />
-                    <span>All Agents</span>
+                    {({ isActive }) => (
+                      <>
+                        <List
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        <span>All Agents</span>
+                      </>
+                    )}
                   </NavLink>
                 )}
 
@@ -169,14 +188,19 @@ export default function Sidebar() {
                     to="/agents/shadow"
                     className={({ isActive }) => subNavClass(isActive)}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                        location.pathname.startsWith("/agents/shadow")
-                          ? "bg-[#2563EB]"
-                          : "bg-slate-300 group-hover:bg-slate-400"
-                      }`}
-                    />
-                    <span>Shadow Agents</span>
+                    {({ isActive }) => (
+                      <>
+                        <Ghost
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-amber-500/80 group-hover:text-amber-600"
+                          }`}
+                        />
+                        <span>Shadow Agents</span>
+                      </>
+                    )}
                   </NavLink>
                 )}
 
@@ -185,14 +209,19 @@ export default function Sidebar() {
                     to="/agents/verified"
                     className={({ isActive }) => subNavClass(isActive)}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                        location.pathname.startsWith("/agents/verified")
-                          ? "bg-[#2563EB]"
-                          : "bg-slate-300 group-hover:bg-slate-400"
-                      }`}
-                    />
-                    <span>Verified Agents</span>
+                    {({ isActive }) => (
+                      <>
+                        <ShieldCheck
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-emerald-500/80 group-hover:text-emerald-600"
+                          }`}
+                        />
+                        <span>Verified Agents</span>
+                      </>
+                    )}
                   </NavLink>
                 )}
               </div>
@@ -211,47 +240,37 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* 4. Scans (Expandable -> Compliance) */}
-        {canViewAssessments && (
-          <div className="flex flex-col">
-            <button
-              type="button"
-              onClick={() => toggleMenu("scans")}
-              className={parentButtonClass(isScansActive, openMenus.scans)}
-            >
-              <div className="flex items-center gap-3">
-                <Radar size={18} className="shrink-0" />
-                <span>Scans</span>
-              </div>
-              <ChevronDown
-                size={14}
-                className={`transition-transform duration-200 ${
-                  openMenus.scans ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {openMenus.scans && (
-              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                <NavLink
-                  to="/assessments"
-                  className={({ isActive }) => subNavClass(isActive)}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                      isScansActive
-                        ? "bg-[#2563EB]"
-                        : "bg-slate-300 group-hover:bg-slate-400"
-                    }`}
-                  />
-                  <span>Compliance</span>
-                </NavLink>
-              </div>
-            )}
-          </div>
+        {/* 4. Scans */}
+        {canViewScans && (
+          <NavLink
+            to="/scans"
+            className={({ isActive }) =>
+              directNavClass(isActive || location.pathname === "/scans")
+            }
+          >
+            <Radar size={18} className="shrink-0" />
+            <span>Scans</span>
+          </NavLink>
         )}
 
-        {/* 5. Integrations */}
+        {/* 5. Compliance */}
+        {canViewCompliance && (
+          <NavLink
+            to="/assessments"
+            className={({ isActive }) =>
+              directNavClass(
+                isActive ||
+                  location.pathname.startsWith("/assessments") ||
+                  location.pathname.startsWith("/compliance")
+              )
+            }
+          >
+            <FileCheck size={18} className="shrink-0" />
+            <span>Compliance</span>
+          </NavLink>
+        )}
+
+        {/* 6. Integrations */}
         {canViewIntegrations && (
           <NavLink
             to="/integrations"
@@ -262,7 +281,7 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* 6. IAM (Expandable -> Users, SSO Integration) */}
+        {/* 7. IAM (Expandable -> Users, SSO Integration) */}
         {canViewIam && (
           <div className="flex flex-col">
             <button
@@ -271,7 +290,7 @@ export default function Sidebar() {
               className={parentButtonClass(isIamActive, openMenus.iam)}
             >
               <div className="flex items-center gap-3">
-                <Users size={18} className="shrink-0" />
+                <Fingerprint size={18} className="shrink-0" />
                 <span>IAM</span>
               </div>
               <ChevronDown
@@ -289,14 +308,19 @@ export default function Sidebar() {
                     to="/user-management"
                     className={({ isActive }) => subNavClass(isActive)}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                        location.pathname.startsWith("/user-management")
-                          ? "bg-[#2563EB]"
-                          : "bg-slate-300 group-hover:bg-slate-400"
-                      }`}
-                    />
-                    <span>Users</span>
+                    {({ isActive }) => (
+                      <>
+                        <UserCheck
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        <span>Users</span>
+                      </>
+                    )}
                   </NavLink>
                 )}
 
@@ -305,14 +329,19 @@ export default function Sidebar() {
                     to="/sso"
                     className={({ isActive }) => subNavClass(isActive)}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                        location.pathname.startsWith("/sso")
-                          ? "bg-[#2563EB]"
-                          : "bg-slate-300 group-hover:bg-slate-400"
-                      }`}
-                    />
-                    <span>SSO Integration</span>
+                    {({ isActive }) => (
+                      <>
+                        <KeyRound
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        <span>SSO Integration</span>
+                      </>
+                    )}
                   </NavLink>
                 )}
               </div>
@@ -320,7 +349,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* 7. Settings (Expandable -> Auto Scans) */}
+        {/* 8. Settings (Expandable -> Auto Scans) */}
         {canViewSettings && (
           <div className="flex flex-col">
             <button
@@ -347,14 +376,19 @@ export default function Sidebar() {
                     to="/auto-discovery"
                     className={({ isActive }) => subNavClass(isActive)}
                   >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                        location.pathname.startsWith("/auto-discovery")
-                          ? "bg-[#2563EB]"
-                          : "bg-slate-300 group-hover:bg-slate-400"
-                      }`}
-                    />
-                    <span>Auto Scans</span>
+                    {({ isActive }) => (
+                      <>
+                        <RefreshCw
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        <span>Auto Scans</span>
+                      </>
+                    )}
                   </NavLink>
                 )}
               </div>
@@ -362,7 +396,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* 8. Audit Logs */}
+        {/* 9. Audit Logs */}
         {canViewAuditLogs && (
           <NavLink
             to="/audit-logs"

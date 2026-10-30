@@ -133,6 +133,24 @@ export default function Header() {
           </div>
         )}
 
+        {/* Run Discovery Scan Button */}
+        <button
+          type="button"
+          onClick={handleRunScan}
+          disabled={scanStatus === "running"}
+          className="flex items-center gap-2 px-3.5 py-1.5 bg-[#2563EB] hover:bg-[#1d4ed8] active:bg-[#1e40af] disabled:bg-[#2563EB]/70 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold shadow-xs hover:shadow-sm transition-all cursor-pointer"
+        >
+          <Radar
+            size={14}
+            className={`shrink-0 ${scanStatus === "running" ? "animate-spin" : ""}`}
+          />
+          <span>
+            {scanStatus === "running"
+              ? `Scanning... ${Math.round(progress)}%`
+              : "Run Discovery Scan"}
+          </span>
+        </button>
+
         {/* User Profile Pill with Avatar */}
         <div className="relative ml-1" ref={userRef}>
           <button
@@ -166,18 +184,7 @@ export default function Header() {
 
               <div className="p-1">
                 <button
-                  onClick={() => {
-                    setUserDropdownOpen(false);
-                    handleRunScan();
-                  }}
-                  disabled={scanStatus === "running"}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Radar size={14} className="text-blue-600" />
-                  <span>Run Discovery Scan</span>
-                </button>
-
-                <button
+                  type="button"
                   onClick={() => {
                     setUserDropdownOpen(false);
                     logout();
