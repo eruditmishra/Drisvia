@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import {
   LogOut,
   Radar,
-  RefreshCw,
   CheckCircle2,
   ChevronDown,
 } from "lucide-react";
@@ -119,13 +118,7 @@ export default function Header() {
 
       {/* ── Right side: User Profile Pill with Avatar ── */}
       <div className="flex items-center gap-3">
-        {/* Scan Status notification pills if scanning */}
-        {scanStatus === "running" && (
-          <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 text-xs font-semibold">
-            <RefreshCw size={12} className="animate-spin text-blue-600" />
-            <span>Scanning... {Math.round(progress)}%</span>
-          </div>
-        )}
+        {/* Scan Status notification pills if completed */}
         {scanStatus === "completed" && (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold">
             <CheckCircle2 size={13} className="text-emerald-500" />
