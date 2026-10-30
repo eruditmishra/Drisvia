@@ -201,8 +201,25 @@ export async function getScan(
   if (!scan) throw new NotFoundError("Scan not found");
   const integrations = await repo.getScanIntegrations(scanId);
   const rawAgents = await repo.getAgentsByScanId(scanId, tenantId);
-  const agents = rawAgents.map(formatAgentResponse);
-  return { ...scan, integrations, agents } as any;
+
+  const scanStart = scan.started_at ? new Date(scan.started_at).getTime() - 10000 : 0;
+  const scanEnd = scan.completed_at ? new Date(scan.completed_at).getTime() + 10000 : Date.now();
+
+  const agents = rawAgents.map((a: any) => {
+    const formatted = formatAgentResponse(a);
+    const createdAtTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const isNew = createdAtTime >= scanStart && createdAtTime <= scanEnd;
+    return { ...formatted, is_new: isNew };
+  });
+
+  const rawModels = await repo.getModelsByScanId(scanId, tenantId);
+  const models = rawModels.map((m: any) => {
+    const createdAtTime = m.created_at ? new Date(m.created_at).getTime() : 0;
+    const isNew = createdAtTime >= scanStart && createdAtTime <= scanEnd;
+    return { ...m, is_new: isNew };
+  });
+
+  return { ...scan, integrations, agents, models } as any;
 }
 
 export async function listScans(
@@ -414,7 +431,9 @@ async function runScan(
 
   const byIntegration: ScanStats["byIntegration"] = {};
   let totalAgents = 0;
+  let newAgents = 0;
   let totalModels = 0;
+  let newModels = 0;
 
   const results = await Promise.allSettled(
     connectors.map((c) =>
@@ -423,8 +442,10 @@ async function runScan(
           found: r.agentsFound,
           models: 0,
           errors: r.errorCount,
+          newAgents: r.newAgentsFound,
         };
         totalAgents += r.agentsFound;
+        newAgents += r.newAgentsFound ?? 0;
         return r;
       }),
     ),
@@ -432,13 +453,25 @@ async function runScan(
 
   // Extract models from all agents ingested in this scan
   try {
-    totalModels = await extractAndUpsertModels(scanId, tenantId, byIntegration);
+    const modelStats = await extractAndUpsertModels(scanId, tenantId, byIntegration);
+    totalModels = modelStats.totalModels;
+    newModels = modelStats.newModels;
   } catch (err: any) {
     await repo.createScanLog(
       scanId,
       "warn",
       `Model extraction failed: ${err.message}`,
     );
+  }
+
+  // Count real agents discovered in this scan (excluding pure identities without models, matching All Agents page)
+  try {
+    const realAgents = await repo.getAgentsByScanId(scanId, tenantId);
+    if (realAgents && realAgents.length > 0) {
+      totalAgents = realAgents.length;
+    }
+  } catch (err: any) {
+    // keep connector totalAgents
   }
 
   const allFailed = results.every((r) => r.status === "rejected");
@@ -448,7 +481,7 @@ async function runScan(
       "All connectors failed")
     : null;
 
-  const stats: ScanStats = { totalAgents, totalModels, byIntegration };
+  const stats: ScanStats = { totalAgents, newAgents, totalModels, newModels, byIntegration };
   await repo.updateScanStatus(scanId, finalStatus, stats as any, errorMessage);
 
   const durationMs = Date.now() - scanStartedAt;
@@ -493,7 +526,7 @@ async function runConnectorScan(
   scanId: string,
   connector: CloudConnectorWithSecrets,
   tenantId: string | null,
-): Promise<{ agentsFound: number; errorCount: number }> {
+): Promise<{ agentsFound: number; newAgentsFound: number; errorCount: number }> {
   await repo.updateScanIntegrationStatus(scanId, connector.id, "running");
   await repo.createScanLog(
     scanId,
@@ -503,6 +536,7 @@ async function runConnectorScan(
   );
 
   let agentsFound = 0;
+  let newAgentsFound = 0;
   const errors: unknown[] = [];
 
   try {
@@ -593,6 +627,9 @@ async function runConnectorScan(
         const saved = await repo.upsertDiscoveredAgent(tenantId, scanId, connector.id, obs);
         if (obs.metadata?.agentStatus === 'confirmed' || obs.metadata?.agentStatus === 'candidate') {
           agentsFound++;
+          if (isNew) {
+            newAgentsFound++;
+          }
         }
 
         // Security assessment — non-blocking, must not affect discovery pipeline
@@ -691,10 +728,10 @@ async function runConnectorScan(
     "info",
     `${connector.name}: scan complete. Agents found: ${agentsFound}`,
     connector.id,
-    { agentsFound, errorCount: errors.length },
+    { agentsFound, newAgentsFound, errorCount: errors.length },
   );
 
-  return { agentsFound, errorCount: errors.length };
+  return { agentsFound, newAgentsFound, errorCount: errors.length };
 }
 
 // ─── INTERNAL: Model extraction ───────────────────────────────────────────────
@@ -703,11 +740,12 @@ async function extractAndUpsertModels(
   scanId: string,
   tenantId: string | null,
   byIntegration: ScanStats["byIntegration"],
-): Promise<number> {
+): Promise<{ totalModels: number; newModels: number }> {
   const agents = await repo.getAgentsByScanId(scanId, tenantId);
-  if (!agents.length) return 0;
+  if (!agents.length) return { totalModels: 0, newModels: 0 };
 
-  let totalUpserted = 0;
+  const uniqueModelIds = new Set<string>();
+  const uniqueNewModelIds = new Set<string>();
   const modelCountByConnector: Record<string, Set<string>> = {};
 
   for (const agent of agents) {
@@ -727,7 +765,10 @@ async function extractAndUpsertModels(
       });
       await repo.upsertAgentModelUsage(agent.id, model.id, context);
       await repo.recalculateModelAgentCount(model.id);
-      totalUpserted++;
+      uniqueModelIds.add(model.id);
+      if (isNewModel) {
+        uniqueNewModelIds.add(model.id);
+      }
 
       // Audit: model.discovered (first time only)
       if (isNewModel) {
@@ -774,7 +815,7 @@ async function extractAndUpsertModels(
     }
   }
 
-  return totalUpserted;
+  return { totalModels: uniqueModelIds.size, newModels: uniqueNewModelIds.size };
 }
 
 /** Extract all model name references from a single discovered agent row. */

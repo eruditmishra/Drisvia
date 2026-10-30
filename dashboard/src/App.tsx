@@ -27,6 +27,7 @@ import DiscoveredModels from './pages/super-admin/DiscoveredModels';
 import Integrations from './pages/super-admin/Integrations';
 import SSOConfig from './pages/super-admin/SSOConfig';
 import AutoDiscovery from './pages/super-admin/AutoDiscovery';
+import ScanHistory from './pages/super-admin/ScanHistory';
 import Assessments from './pages/super-admin/Assessments';
 import AssessmentDetail from './pages/super-admin/AssessmentDetail';
 
@@ -102,6 +103,13 @@ export default function App() {
           <Route path="/sso" element={<SSOConfig />} />
         </Route>
 
+        {/* ── Scans ──────────────────────────────────────────────────────── */}
+        <Route element={<ProtectedRoute requirePermission={{ resource: 'auto_discovery_config', action: 'view', featureName: 'Scans' }} />}>
+          <Route path="/scans" element={<ScanHistory />} />
+          <Route path="/scans/history" element={<Navigate to="/scans" replace />} />
+          <Route path="/scans/auto" element={<Navigate to="/auto-discovery" replace />} />
+        </Route>
+
         {/* ── Auto Discovery Configuration ───────────────────────────────── */}
         <Route element={<ProtectedRoute requirePermission={{ resource: 'auto_discovery_config', action: 'view', featureName: 'Auto Discovery Configuration' }} />}>
           <Route path="/auto-discovery" element={<AutoDiscovery />} />
@@ -111,6 +119,7 @@ export default function App() {
         <Route element={<ProtectedRoute requirePermission={{ resource: 'assessments', action: 'view', featureName: 'Assessments' }} />}>
           <Route path="/assessments" element={<Assessments />} />
           <Route path="/assessments/:agentId" element={<AssessmentDetail />} />
+          <Route path="/compliance" element={<Navigate to="/assessments" replace />} />
         </Route>
 
         {/* ── User Management ────────────────────────────────────────────── */}
@@ -130,6 +139,8 @@ export default function App() {
         <Route path="/super-admin/agents/verified"  element={<Navigate to="/agents/verified" replace />} />
         <Route path="/super-admin/agents/:id"       element={<Navigate to="/agents/:id" replace />} />
         <Route path="/super-admin/models"           element={<Navigate to="/models" replace />} />
+        <Route path="/super-admin/scans"            element={<Navigate to="/scans" replace />} />
+        <Route path="/super-admin/compliance"       element={<Navigate to="/assessments" replace />} />
         <Route path="/super-admin/integrations"     element={<Navigate to="/integrations" replace />} />
         <Route path="/super-admin/sso"              element={<Navigate to="/sso" replace />} />
         <Route path="/super-admin/auto-discovery"   element={<Navigate to="/auto-discovery" replace />} />

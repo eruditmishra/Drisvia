@@ -325,9 +325,11 @@ export interface DiscoveryScan {
 export interface ScanStats {
   totalAgents: number;
   totalModels: number;
+  newAgents?: number;
+  newModels?: number;
   byIntegration: Record<
     string,
-    { found: number; models: number; errors: number }
+    { found: number; models: number; errors: number; newAgents?: number; newModels?: number }
   >;
   discoveryErrors?: unknown[];
 }

@@ -821,11 +821,15 @@ export async function getAgentsByScanId(
 ): Promise<DiscoveredAgent[]> {
   const res = tenantId
     ? await db.query(
-        `SELECT * FROM discovered_agents WHERE scan_id = $1 AND tenant_id = $2`,
+        `SELECT * FROM discovered_agents 
+         WHERE scan_id = $1 AND tenant_id = $2
+           AND NOT (deployment_type = 'identity' AND (model IS NULL OR model = ''))`,
         [scanId, tenantId],
       )
     : await db.query(
-        `SELECT * FROM discovered_agents WHERE scan_id = $1 AND tenant_id IS NULL`,
+        `SELECT * FROM discovered_agents 
+         WHERE scan_id = $1 AND tenant_id IS NULL
+           AND NOT (deployment_type = 'identity' AND (model IS NULL OR model = ''))`,
         [scanId],
       );
   return res.rows;
@@ -1050,6 +1054,23 @@ export async function getAgentsForModel(
      LIMIT ${tenantId ? "$3" : "$2"}`,
     tenantId ? [modelId, tenantId, limit] : [modelId, limit],
   );
+  return res.rows;
+}
+
+export async function getModelsByScanId(
+  scanId: string,
+  tenantId: string | null,
+): Promise<DiscoveredModel[]> {
+  const query = `
+    SELECT DISTINCT dm.*
+    FROM discovered_models dm
+    JOIN agent_model_usage amu ON amu.model_id = dm.id
+    JOIN discovered_agents da ON da.id = amu.agent_id
+    WHERE da.scan_id = $1
+      ${tenantId ? "AND dm.tenant_id = $2" : "AND dm.tenant_id IS NULL"}
+    ORDER BY dm.name ASC
+  `;
+  const res = await db.query(query, tenantId ? [scanId, tenantId] : [scanId]);
   return res.rows;
 }
 
