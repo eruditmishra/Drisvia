@@ -8,12 +8,12 @@ import {
   ShieldCheck,
   Box,
   Radar,
+  History,
   FileCheck,
   Share2,
   Fingerprint,
   UserCheck,
   KeyRound,
-  Settings,
   RefreshCw,
   FileText,
   ChevronDown,
@@ -44,17 +44,16 @@ export default function Sidebar() {
   const canViewAnyAgents =
     canViewAgents || canViewShadowAgents || canViewVerifiedAgents;
   const canViewIam = canViewUsers || canViewSso;
-  const canViewSettings = canViewAutoDiscovery;
 
   // ── Accordion State: sub-options toggle on clicking main option ──
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => ({
     agents: location.pathname.startsWith("/agents"),
+    scans:
+      location.pathname.startsWith("/scans") ||
+      location.pathname.startsWith("/auto-discovery"),
     iam:
       location.pathname.startsWith("/user-management") ||
       location.pathname.startsWith("/sso"),
-    settings:
-      location.pathname.startsWith("/auto-discovery") ||
-      location.pathname.startsWith("/settings"),
   }));
 
   const toggleMenu = (key: string) => {
@@ -92,12 +91,12 @@ export default function Sidebar() {
 
   // ── Active group indicators ──
   const isAgentsActive = location.pathname.startsWith("/agents");
+  const isScansActive =
+    location.pathname.startsWith("/scans") ||
+    location.pathname.startsWith("/auto-discovery");
   const isIamActive =
     location.pathname.startsWith("/user-management") ||
     location.pathname.startsWith("/sso");
-  const isSettingsActive =
-    location.pathname.startsWith("/auto-discovery") ||
-    location.pathname.startsWith("/settings");
 
   return (
     <aside className="w-[230px] min-w-[230px] h-screen flex flex-col bg-[#F2F9FD] relative z-10 shrink-0 select-none">
@@ -139,7 +138,7 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* 2. Agents (Expandable) */}
+        {/* 2. Agents (Expandable -> All Agents, Shadow Agents, Verified Agents) */}
         {canViewAnyAgents && (
           <div className="flex flex-col">
             <button
@@ -240,17 +239,71 @@ export default function Sidebar() {
           </NavLink>
         )}
 
-        {/* 4. Scans */}
+        {/* 4. Scans (Expandable -> Scan History, Auto Scans) */}
         {canViewScans && (
-          <NavLink
-            to="/scans"
-            className={({ isActive }) =>
-              directNavClass(isActive || location.pathname === "/scans")
-            }
-          >
-            <Radar size={18} className="shrink-0" />
-            <span>Scans</span>
-          </NavLink>
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => toggleMenu("scans")}
+              className={parentButtonClass(isScansActive, openMenus.scans)}
+            >
+              <div className="flex items-center gap-3">
+                <Radar size={18} className="shrink-0" />
+                <span>Scans</span>
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  openMenus.scans ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {openMenus.scans && (
+              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                <NavLink
+                  to="/scans"
+                  end
+                  className={({ isActive }) => subNavClass(isActive)}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <History
+                        size={14}
+                        className={`shrink-0 transition-colors ${
+                          isActive
+                            ? "text-[#2563EB]"
+                            : "text-slate-400 group-hover:text-slate-600"
+                        }`}
+                      />
+                      <span>Scan History</span>
+                    </>
+                  )}
+                </NavLink>
+
+                {canViewAutoDiscovery && (
+                  <NavLink
+                    to="/auto-discovery"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <RefreshCw
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-slate-400 group-hover:text-slate-600"
+                          }`}
+                        />
+                        <span>Auto Scans</span>
+                      </>
+                    )}
+                  </NavLink>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* 5. Compliance */}
@@ -349,54 +402,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* 8. Settings (Expandable -> Auto Scans) */}
-        {canViewSettings && (
-          <div className="flex flex-col">
-            <button
-              type="button"
-              onClick={() => toggleMenu("settings")}
-              className={parentButtonClass(isSettingsActive, openMenus.settings)}
-            >
-              <div className="flex items-center gap-3">
-                <Settings size={18} className="shrink-0" />
-                <span>Settings</span>
-              </div>
-              <ChevronDown
-                size={14}
-                className={`transition-transform duration-200 ${
-                  openMenus.settings ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {openMenus.settings && (
-              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
-                {canViewAutoDiscovery && (
-                  <NavLink
-                    to="/auto-discovery"
-                    className={({ isActive }) => subNavClass(isActive)}
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <RefreshCw
-                          size={14}
-                          className={`shrink-0 transition-colors ${
-                            isActive
-                              ? "text-[#2563EB]"
-                              : "text-slate-400 group-hover:text-slate-600"
-                          }`}
-                        />
-                        <span>Auto Scans</span>
-                      </>
-                    )}
-                  </NavLink>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 9. Audit Logs */}
+        {/* 8. Audit Logs */}
         {canViewAuditLogs && (
           <NavLink
             to="/audit-logs"

@@ -124,7 +124,11 @@ export const dashboardAPI = {
 
 export const discoveryAPI = {
   startScan: (integration_ids?: string[], scan_all?: boolean) => api.post<{ scanId: string }>("/discovery/scans", { integration_ids, scan_all }),
+  listScans: (params?: { status?: string; limit?: number; offset?: number }) =>
+    api.get<{ scans: any[]; total: number }>("/discovery/scans", { params }),
   getScan: (id: string) => api.get<{ scan: any }>(`/discovery/scans/${id}`),
+  getScanLogs: (id: string, params?: { limit?: number; offset?: number }) =>
+    api.get<{ logs: any[]; total: number }>(`/discovery/scans/${id}/logs`, { params }),
   getAgents: (params: Record<string, any> = {}) => {
     const cleanParams = Object.fromEntries(
       Object.entries(params).filter(([_, v]) => v !== undefined && v !== '')

@@ -27,6 +27,7 @@ import DiscoveredModels from './pages/super-admin/DiscoveredModels';
 import Integrations from './pages/super-admin/Integrations';
 import SSOConfig from './pages/super-admin/SSOConfig';
 import AutoDiscovery from './pages/super-admin/AutoDiscovery';
+import ScanHistory from './pages/super-admin/ScanHistory';
 import Assessments from './pages/super-admin/Assessments';
 import AssessmentDetail from './pages/super-admin/AssessmentDetail';
 
@@ -104,7 +105,9 @@ export default function App() {
 
         {/* ── Scans ──────────────────────────────────────────────────────── */}
         <Route element={<ProtectedRoute requirePermission={{ resource: 'auto_discovery_config', action: 'view', featureName: 'Scans' }} />}>
-          <Route path="/scans" element={<AutoDiscovery />} />
+          <Route path="/scans" element={<ScanHistory />} />
+          <Route path="/scans/history" element={<Navigate to="/scans" replace />} />
+          <Route path="/scans/auto" element={<Navigate to="/auto-discovery" replace />} />
         </Route>
 
         {/* ── Auto Discovery Configuration ───────────────────────────────── */}
