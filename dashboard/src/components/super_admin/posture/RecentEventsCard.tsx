@@ -10,7 +10,7 @@ export default function RecentEventsCard({ data }: Props) {
   const navigate = useNavigate();
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[270px]">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col min-h-[295px]">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Recent Security Events
@@ -23,7 +23,7 @@ export default function RecentEventsCard({ data }: Props) {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 w-full">
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="text-slate-400 font-semibold border-b border-slate-100 text-[11px]">

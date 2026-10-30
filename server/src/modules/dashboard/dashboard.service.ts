@@ -490,7 +490,7 @@ export async function getSecurityPostureData(
     .sort((a, b) => b.agentCount - a.agentCount)
     .slice(0, 6);
 
-  // Fetch recent security events from agent_security_drift or audit_logs
+  // Fetch recent agent-level security events and alerts
   let recentEvents: any[] = [];
   try {
     const driftQuery = `
@@ -524,26 +524,49 @@ export async function getSecurityPostureData(
         };
       });
     } else {
-      // Query real audit logs
+      // Query real agent-level audit events (strictly entity_type = 'agent', NOT platform logs)
       const auditRes = await db.query(
-        `SELECT id, created_at, event_type, summary, COALESCE(entity_name, 'System') as entity_name
-         FROM audit_logs
-         WHERE (${tenantId ? "tenant_id = $1" : "tenant_id IS NULL"})
-         ORDER BY created_at DESC
+        `SELECT 
+           al.id, 
+           al.created_at, 
+           al.event_type, 
+           al.summary, 
+           COALESCE(al.entity_name, da.name, 'AI Agent') as agent_name,
+           da.status as agent_status,
+           da.api_keys_detected,
+           da.secrets_detected,
+           da.database_access
+         FROM audit_logs al
+         LEFT JOIN discovered_agents da ON (al.entity_id = da.id::text OR al.entity_name = da.name)
+         WHERE al.entity_type = 'agent' 
+           AND (${tenantId ? "al.tenant_id = $1" : "al.tenant_id IS NULL"})
+         ORDER BY al.created_at DESC
          LIMIT 5`,
         tenantId ? [tenantId] : []
       );
       if (auditRes.rows.length > 0) {
         recentEvents = auditRes.rows.map((row) => {
           let severity: "Critical" | "High" | "Medium" = "Medium";
-          const ev = (row.event_type || "").toLowerCase();
-          if (ev.includes("security") || ev.includes("vulnerability") || ev.includes("fail")) severity = "Critical";
-          else if (ev.includes("shadow") || ev.includes("unapproved") || ev.includes("flag")) severity = "High";
+          if (row.secrets_detected || row.api_keys_detected || row.database_access) {
+            severity = "High";
+          }
+          if (row.agent_status === "shadow" || !row.agent_status || row.agent_status === "unapproved") {
+            severity = "High";
+          }
+          let title = "Agent security event detected";
+          if (row.event_type === "agent.discovered") {
+            title = "Unmanaged agent discovered in estate";
+          } else if (row.event_type === "agent.updated") {
+            title = "Agent configuration & permissions re-scanned";
+          } else if (row.summary) {
+            title = row.summary;
+          }
+
           return {
             id: row.id,
             timeAgo: formatRelativeTime(new Date(row.created_at)),
-            title: row.summary || row.event_type,
-            agentName: row.entity_name || "discovery-scanner",
+            title,
+            agentName: row.agent_name || "ai-agent",
             severity,
           };
         });
@@ -555,11 +578,11 @@ export async function getSecurityPostureData(
 
   if (recentEvents.length === 0) {
     recentEvents = [
-      { id: "ev-1", timeAgo: "2 hours ago", title: "New high-risk agent discovered", agentName: "gie-integration-intelligence-dev", severity: "Critical" },
-      { id: "ev-2", timeAgo: "3 hours ago", title: "Agent gained secrets access", agentName: "finance-assistant", severity: "High" },
-      { id: "ev-3", timeAgo: "5 hours ago", title: "Shadow agent detected", agentName: "customer-support", severity: "Medium" },
-      { id: "ev-4", timeAgo: "8 hours ago", title: "Guardrail configuration missing", agentName: "hr-assistant", severity: "Medium" },
-      { id: "ev-5", timeAgo: "1 day ago", title: "Unapproved model in use", agentName: "sales-assistant", severity: "Medium" },
+      { id: "ev-1", timeAgo: "2 hours ago", title: "Unmanaged shadow agent discovered", agentName: "gie-chief-orchestrator-dev", severity: "High" },
+      { id: "ev-2", timeAgo: "3 hours ago", title: "Agent sensitive tools detected", agentName: "wm-test-agent", severity: "High" },
+      { id: "ev-3", timeAgo: "5 hours ago", title: "Unverified model assigned to agent", agentName: "agent-framework-agent", severity: "Medium" },
+      { id: "ev-4", timeAgo: "8 hours ago", title: "Agent runtime permissions re-scanned", agentName: "ai-runtime-soc", severity: "Medium" },
+      { id: "ev-5", timeAgo: "1 day ago", title: "Missing owner and controls flagged", agentName: "Test-agent-wm", severity: "Medium" },
     ];
   }
 
@@ -729,13 +752,13 @@ export async function getSecurityPostureData(
       { capabilityId: "mcp_connections", label: "MCP connections", icon: "Link2", agentCount: capabilityCounts.mcp_connections, riskLevel: "Medium" },
     ],
     owaspFramework: [
-      { code: "AAI01", category: "Authorization & Control Hijacking", icon: "Bot", affectedAgents: owaspAffected.AAI01 || 12, trend: 4 },
-      { code: "AAI02", category: "Goal & Instruction Manipulation", icon: "Target", affectedAgents: owaspAffected.AAI02 || 9, trend: 3 },
-      { code: "AAI03", category: "Insecure Tool Communication", icon: "MessageSquare", affectedAgents: owaspAffected.AAI03 || 7, trend: 2 },
-      { code: "AAI04", category: "Cascading Failures", icon: "GitFork", affectedAgents: owaspAffected.AAI04 || 6, trend: 1 },
-      { code: "AAI05", category: "Supply Chain & Dependency Risk", icon: "Package", affectedAgents: owaspAffected.AAI05 || 4, trend: null },
-      { code: "AAI08", category: "Human Oversight", icon: "UserCheck", affectedAgents: owaspAffected.AAI08 || 8, trend: 3 },
-      { code: "AAI10", category: "Observability & Traceability", icon: "Eye", affectedAgents: owaspAffected.AAI10 || 5, trend: 2 },
+      { code: "AAI01", category: "Authorization & Control Hijacking", icon: "Bot", affectedAgents: owaspAffected.AAI01 || 0 },
+      { code: "AAI02", category: "Goal & Instruction Manipulation", icon: "Target", affectedAgents: owaspAffected.AAI02 || 0 },
+      { code: "AAI03", category: "Insecure Tool Communication", icon: "MessageSquare", affectedAgents: owaspAffected.AAI03 || 0 },
+      { code: "AAI04", category: "Cascading Failures", icon: "GitFork", affectedAgents: owaspAffected.AAI04 || 0 },
+      { code: "AAI05", category: "Supply Chain & Dependency Risk", icon: "Package", affectedAgents: owaspAffected.AAI05 || 0 },
+      { code: "AAI08", category: "Human Oversight", icon: "UserCheck", affectedAgents: owaspAffected.AAI08 || 0 },
+      { code: "AAI10", category: "Observability & Traceability", icon: "Eye", affectedAgents: owaspAffected.AAI10 || 0 },
     ],
     topModels: topModels.length > 0 ? topModels : [
       { modelName: "Claude 3 Haiku", provider: "Anthropic", agentCount: 32, riskLevel: "High" },
@@ -872,13 +895,13 @@ function generateBaselinePostureData(period: string, environment: string) {
       { capabilityId: "mcp_connections", label: "MCP connections", icon: "Link2", agentCount: 6, riskLevel: "Medium" },
     ],
     owaspFramework: [
-      { code: "AAI01", category: "Authorization & Control Hijacking", icon: "Bot", affectedAgents: 12, trend: 4 },
-      { code: "AAI02", category: "Goal & Instruction Manipulation", icon: "Target", affectedAgents: 9, trend: 3 },
-      { code: "AAI03", category: "Insecure Tool Communication", icon: "MessageSquare", affectedAgents: 7, trend: 2 },
-      { code: "AAI04", category: "Cascading Failures", icon: "GitFork", affectedAgents: 6, trend: 1 },
-      { code: "AAI05", category: "Supply Chain & Dependency Risk", icon: "Package", affectedAgents: 4, trend: null },
-      { code: "AAI08", category: "Human Oversight", icon: "UserCheck", affectedAgents: 8, trend: 3 },
-      { code: "AAI10", category: "Observability & Traceability", icon: "Eye", affectedAgents: 5, trend: 2 },
+      { code: "AAI01", category: "Authorization & Control Hijacking", icon: "Bot", affectedAgents: 12 },
+      { code: "AAI02", category: "Goal & Instruction Manipulation", icon: "Target", affectedAgents: 9 },
+      { code: "AAI03", category: "Insecure Tool Communication", icon: "MessageSquare", affectedAgents: 7 },
+      { code: "AAI04", category: "Cascading Failures", icon: "GitFork", affectedAgents: 6 },
+      { code: "AAI05", category: "Supply Chain & Dependency Risk", icon: "Package", affectedAgents: 4 },
+      { code: "AAI08", category: "Human Oversight", icon: "UserCheck", affectedAgents: 8 },
+      { code: "AAI10", category: "Observability & Traceability", icon: "Eye", affectedAgents: 5 },
     ],
     topModels: [
       { modelName: "Claude 3 Haiku", provider: "Anthropic", agentCount: 32, riskLevel: "High" },

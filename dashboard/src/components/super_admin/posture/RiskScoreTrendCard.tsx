@@ -27,7 +27,7 @@ export default function RiskScoreTrendCard({ data, period = "30d", onPeriodChang
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[270px]">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col min-h-[295px]">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Risk Score Trend

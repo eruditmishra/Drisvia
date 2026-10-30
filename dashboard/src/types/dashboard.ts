@@ -96,7 +96,7 @@ export interface PostureDashboardData {
     category: string;
     icon: string;
     affectedAgents: number;
-    trend: number | null;
+    trend?: number | null;
   }>;
   topModels: Array<{
     modelName: string;
