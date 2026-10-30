@@ -86,6 +86,7 @@ export default function App() {
         {/* ── Identities — Azure Entra agent identities ────────────────────── */}
         <Route element={<ProtectedRoute requirePermission={{ resource: 'agents', action: 'view', featureName: 'Agent Identities' }} />}>
           <Route path="/identities" element={<AgentIdentities />} />
+          <Route path="/agents/identities" element={<Navigate to="/identities" replace />} />
         </Route>
 
         {/* ── Models ─────────────────────────────────────────────────────── */}
@@ -138,6 +139,7 @@ export default function App() {
         <Route path="/super-admin/agents/shadow"    element={<Navigate to="/agents/shadow" replace />} />
         <Route path="/super-admin/agents/verified"  element={<Navigate to="/agents/verified" replace />} />
         <Route path="/super-admin/agents/:id"       element={<Navigate to="/agents/:id" replace />} />
+        <Route path="/super-admin/identities"       element={<Navigate to="/identities" replace />} />
         <Route path="/super-admin/models"           element={<Navigate to="/models" replace />} />
         <Route path="/super-admin/scans"            element={<Navigate to="/scans" replace />} />
         <Route path="/super-admin/compliance"       element={<Navigate to="/assessments" replace />} />

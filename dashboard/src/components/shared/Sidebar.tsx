@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutGrid,
@@ -6,6 +6,7 @@ import {
   List,
   Ghost,
   ShieldCheck,
+  IdCard,
   Box,
   Radar,
   History,
@@ -47,7 +48,9 @@ export default function Sidebar() {
 
   // ── Accordion State: sub-options toggle on clicking main option ──
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => ({
-    agents: location.pathname.startsWith("/agents"),
+    agents:
+      location.pathname.startsWith("/agents") ||
+      location.pathname.startsWith("/identities"),
     scans:
       location.pathname.startsWith("/scans") ||
       location.pathname.startsWith("/auto-discovery"),
@@ -90,13 +93,22 @@ export default function Sidebar() {
     }`;
 
   // ── Active group indicators ──
-  const isAgentsActive = location.pathname.startsWith("/agents");
+  const isAgentsActive =
+    location.pathname.startsWith("/agents") ||
+    location.pathname.startsWith("/identities");
   const isScansActive =
     location.pathname.startsWith("/scans") ||
     location.pathname.startsWith("/auto-discovery");
   const isIamActive =
     location.pathname.startsWith("/user-management") ||
     location.pathname.startsWith("/sso");
+
+  // Keep accordion open when navigating to active sub-items
+  useEffect(() => {
+    if (isAgentsActive) {
+      setOpenMenus((prev) => ({ ...prev, agents: true }));
+    }
+  }, [isAgentsActive]);
 
   return (
     <aside className="w-[230px] min-w-[230px] h-screen flex flex-col bg-[#F2F9FD] relative z-10 shrink-0 select-none">
@@ -219,6 +231,27 @@ export default function Sidebar() {
                           }`}
                         />
                         <span>Verified Agents</span>
+                      </>
+                    )}
+                  </NavLink>
+                )}
+
+                {canViewAgents && (
+                  <NavLink
+                    to="/identities"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <IdCard
+                          size={14}
+                          className={`shrink-0 transition-colors ${
+                            isActive
+                              ? "text-[#2563EB]"
+                              : "text-purple-500/80 group-hover:text-purple-600"
+                          }`}
+                        />
+                        <span>Identities</span>
                       </>
                     )}
                   </NavLink>

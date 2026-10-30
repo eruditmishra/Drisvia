@@ -38,7 +38,13 @@ interface ScanRecord {
     newModels?: number;
     byIntegration?: Record<
       string,
-      { found?: number; models?: number; errors?: number; newAgents?: number; newModels?: number }
+      {
+        found?: number;
+        models?: number;
+        errors?: number;
+        newAgents?: number;
+        newModels?: number;
+      }
     >;
   } | null;
   created_at: string;
@@ -101,8 +107,12 @@ export default function ScanHistory() {
   const [scanDetail, setScanDetail] = useState<ScanDetailData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [modalAgentFilter, setModalAgentFilter] = useState<"all" | "new">("all");
-  const [modalModelFilter, setModalModelFilter] = useState<"all" | "new">("all");
+  const [modalAgentFilter, setModalAgentFilter] = useState<"all" | "new">(
+    "all",
+  );
+  const [modalModelFilter, setModalModelFilter] = useState<"all" | "new">(
+    "all",
+  );
 
   // Active scan trigger state
   const [isTriggering, setIsTriggering] = useState(false);
@@ -145,15 +155,103 @@ export default function ScanHistory() {
     fetchScans();
   }, []);
 
+  // Live timer for active scans duration ticker
+  const [now, setNow] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const isScanRunning =
+      scanDetail?.status === "running" ||
+      scans.some((s) => s.status === "running" || s.status === "pending");
+
+    if (!isScanRunning) return;
+
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [scanDetail?.status, scans]);
+
   // Listen for scan completion events from Header to auto-refresh
   useEffect(() => {
     const handleScanDone = () => {
       fetchScans();
+      if (selectedScanId) {
+        discoveryAPI
+          .getScan(selectedScanId)
+          .then((res) => {
+            if (res.data?.scan) setScanDetail(res.data.scan);
+          })
+          .catch(console.error);
+      }
     };
     window.addEventListener("drisvia:scan-completed", handleScanDone);
     return () =>
       window.removeEventListener("drisvia:scan-completed", handleScanDone);
-  }, []);
+  }, [selectedScanId]);
+
+  // Auto-poll active scan detail while modal is open and scan is running
+  useEffect(() => {
+    if (!selectedScanId) return;
+    if (
+      scanDetail &&
+      scanDetail.status !== "running" &&
+      scanDetail.status !== "pending"
+    ) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const poll = async () => {
+      try {
+        const res = await discoveryAPI.getScan(selectedScanId);
+        if (!isMounted) return;
+        const fresh = res.data?.scan;
+        if (fresh) {
+          setScanDetail(fresh);
+          if (fresh.status === "completed" || fresh.status === "failed") {
+            fetchScans();
+            window.dispatchEvent(
+              new CustomEvent("drisvia:scan-completed", { detail: fresh }),
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Failed to poll scan diagnostics", err);
+      }
+    };
+
+    // Poll every 1.5 seconds for snappy updates
+    const interval = setInterval(poll, 1500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedScanId, scanDetail?.status]);
+
+  // Auto-poll scans list when any background scan is in progress
+  useEffect(() => {
+    const hasRunning = scans.some(
+      (s) => s.status === "running" || s.status === "pending",
+    );
+    if (!hasRunning) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const [scansRes] = await Promise.all([
+          discoveryAPI.listScans({ limit: 100 }),
+          fetchOverallCounts(),
+        ]);
+        setScans(scansRes.data?.scans || []);
+      } catch (err) {
+        console.error("Failed to poll scan history", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [scans]);
 
   // Load detailed scan
   const handleOpenDetail = async (scanId: string) => {
@@ -166,6 +264,24 @@ export default function ScanHistory() {
       setScanDetail(res.data?.scan || null);
     } catch (err) {
       console.error("Failed to load scan details", err);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleRefreshDetail = async (scanId: string) => {
+    setDetailLoading(true);
+    try {
+      const res = await discoveryAPI.getScan(scanId);
+      setScanDetail(res.data?.scan || null);
+      if (
+        res.data?.scan?.status === "completed" ||
+        res.data?.scan?.status === "failed"
+      ) {
+        fetchScans();
+      }
+    } catch (err) {
+      console.error("Failed to refresh scan details", err);
     } finally {
       setDetailLoading(false);
     }
@@ -199,11 +315,11 @@ export default function ScanHistory() {
     }
   };
 
-  // Duration helper
+  // Duration helper with live ticking
   const formatDuration = (start?: string | null, end?: string | null) => {
     if (!start) return "—";
     const startTime = new Date(start).getTime();
-    const endTime = end ? new Date(end).getTime() : Date.now();
+    const endTime = end ? new Date(end).getTime() : now;
     const diffSec = Math.max(0, Math.round((endTime - startTime) / 1000));
     if (diffSec < 60) return `${diffSec}s`;
     const mins = Math.floor(diffSec / 60);
@@ -276,10 +392,7 @@ export default function ScanHistory() {
             disabled={isTriggering}
             className="flex items-center gap-2 px-4 py-2 bg-[#2563EB] hover:bg-blue-700 active:bg-blue-800 disabled:opacity-75 text-white rounded-xl text-xs font-bold shadow-xs hover:shadow-sm transition-all cursor-pointer"
           >
-            <Radar
-              size={14}
-              className={isTriggering ? "animate-spin" : ""}
-            />
+            <Radar size={14} className={isTriggering ? "animate-spin" : ""} />
             <span>{isTriggering ? "Starting Scan..." : "Run New Scan"}</span>
           </button>
         </div>
@@ -315,7 +428,9 @@ export default function ScanHistory() {
               {completedScans}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              {runningScans > 0 ? `${runningScans} in progress` : "All scans finished"}
+              {runningScans > 0
+                ? `${runningScans} in progress`
+                : "All scans finished"}
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
@@ -529,13 +644,19 @@ export default function ScanHistory() {
                       <td className="py-3.5 px-4">
                         {isCompleted && (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-[11px]">
-                            <CheckCircle2 size={12} className="text-emerald-500" />
+                            <CheckCircle2
+                              size={12}
+                              className="text-emerald-500"
+                            />
                             Completed
                           </span>
                         )}
                         {isRunning && (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[#2563EB] font-bold text-[11px] animate-pulse">
-                            <RefreshCw size={12} className="animate-spin text-blue-600" />
+                            <RefreshCw
+                              size={12}
+                              className="animate-spin text-blue-600"
+                            />
                             In Progress
                           </span>
                         )}
@@ -653,8 +774,17 @@ export default function ScanHistory() {
                     </span>
                   )}
                   {scanDetail?.status === "running" && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse flex items-center gap-1">
+                      <RefreshCw
+                        size={10}
+                        className="animate-spin text-blue-600"
+                      />
                       RUNNING
+                    </span>
+                  )}
+                  {scanDetail?.status === "failed" && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200">
+                      FAILED
                     </span>
                   )}
                 </div>
@@ -676,12 +806,30 @@ export default function ScanHistory() {
                 </div>
               </div>
 
-              <button
-                onClick={handleCloseDetail}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
-              >
-                <X size={18} />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    selectedScanId && handleRefreshDetail(selectedScanId)
+                  }
+                  disabled={detailLoading}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                  title="Refresh Diagnostics"
+                >
+                  <RefreshCw
+                    size={14}
+                    className={
+                      detailLoading ? "animate-spin text-blue-600" : ""
+                    }
+                  />
+                </button>
+                <button
+                  onClick={handleCloseDetail}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </div>
 
             {/* Modal Body */}
@@ -702,7 +850,9 @@ export default function ScanHistory() {
                         Started At
                       </span>
                       <p className="text-xs font-semibold text-slate-800 mt-0.5">
-                        {formatDate(scanDetail?.started_at || scanDetail?.created_at)}
+                        {formatDate(
+                          scanDetail?.started_at || scanDetail?.created_at,
+                        )}
                       </p>
                     </div>
 
@@ -719,11 +869,16 @@ export default function ScanHistory() {
                       <span className="text-[10px] uppercase font-bold text-slate-400">
                         Total Duration
                       </span>
-                      <p className="text-xs font-semibold text-slate-800 mt-0.5">
-                        {formatDuration(
-                          scanDetail?.started_at,
-                          scanDetail?.completed_at
+                      <p className="text-xs font-semibold text-slate-800 mt-0.5 flex items-center gap-1.5">
+                        {scanDetail?.status === "running" && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping inline-block" />
                         )}
+                        <span>
+                          {formatDuration(
+                            scanDetail?.started_at,
+                            scanDetail?.completed_at,
+                          )}
+                        </span>
                       </p>
                     </div>
 
@@ -748,6 +903,32 @@ export default function ScanHistory() {
                     </div>
                   </div>
 
+                  {/* Live running banner */}
+                  {scanDetail?.status === "running" && (
+                    <div className="bg-blue-50/80 border border-blue-200/80 rounded-2xl p-3.5 flex items-center justify-between text-xs text-blue-900 shadow-xs">
+                      <div className="flex items-center gap-2.5">
+                        <RefreshCw
+                          size={15}
+                          className="animate-spin text-blue-600 shrink-0"
+                        />
+                        <div>
+                          <span className="font-bold">
+                            Scan in progress...{" "}
+                          </span>
+                          {/* <span className="text-blue-700">
+                            Polling backend every 1.5s as connectors discover AI assets and models.
+                          </span> */}
+                        </div>
+                      </div>
+                      <span className="font-mono text-xs font-bold text-blue-700 bg-white/90 px-2.5 py-1 rounded-lg border border-blue-200 shadow-xs">
+                        {formatDuration(
+                          scanDetail?.started_at,
+                          scanDetail?.completed_at,
+                        )}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Connected Integrations & Per-Connector Breakdown */}
                   <div>
                     <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-2">
@@ -755,21 +936,30 @@ export default function ScanHistory() {
                       Integration Scanners
                     </h3>
 
-                    {scanDetail?.integrations && scanDetail.integrations.length > 0 ? (
+                    {scanDetail?.integrations &&
+                    scanDetail.integrations.length > 0 ? (
                       <div className="space-y-3">
                         {scanDetail.integrations.map((conn) => {
                           const hasErrors =
-                            conn.errors && Array.isArray(conn.errors) && conn.errors.length > 0;
+                            conn.errors &&
+                            Array.isArray(conn.errors) &&
+                            conn.errors.length > 0;
+                          const isConnRunning = conn.status === "running";
 
                           return (
                             <div
                               key={conn.id}
-                              className="border border-slate-200 rounded-2xl p-4 bg-white shadow-xs"
+                              className={`border rounded-2xl p-4 shadow-xs transition-colors ${
+                                isConnRunning
+                                  ? "border-blue-200 bg-blue-50/20"
+                                  : "border-slate-200 bg-white"
+                              }`}
                             >
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                   <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs">
-                                    {conn.provider?.charAt(0).toUpperCase() || "I"}
+                                    {conn.provider?.charAt(0).toUpperCase() ||
+                                      "I"}
                                   </div>
                                   <div>
                                     <div className="text-xs font-bold text-slate-900">
@@ -791,12 +981,22 @@ export default function ScanHistory() {
                                     <span>{conn.models_found} Models</span>
                                   </div>
                                   <span
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 ${
                                       conn.status === "completed"
                                         ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                        : "bg-rose-50 text-rose-700 border border-rose-200"
+                                        : conn.status === "running"
+                                          ? "bg-blue-50 text-blue-700 border border-blue-200 animate-pulse"
+                                          : conn.status === "pending"
+                                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                            : "bg-rose-50 text-rose-700 border border-rose-200"
                                     }`}
                                   >
+                                    {isConnRunning && (
+                                      <RefreshCw
+                                        size={9}
+                                        className="animate-spin text-blue-600"
+                                      />
+                                    )}
                                     {conn.status.toUpperCase()}
                                   </span>
                                 </div>
@@ -808,21 +1008,24 @@ export default function ScanHistory() {
                                   <div className="text-[11px] font-bold text-amber-700 flex items-center gap-1 mb-1.5">
                                     <AlertTriangle size={12} />
                                     <span>
-                                      {conn.errors.length} Collector Advisory / Permission
-                                      Notice{conn.errors.length > 1 ? "s" : ""}:
+                                      {conn.errors.length} Collector Advisory /
+                                      Permission Notice
+                                      {conn.errors.length > 1 ? "s" : ""}:
                                     </span>
                                   </div>
                                   <div className="max-h-28 overflow-y-auto space-y-1 custom-scrollbar">
-                                    {conn.errors.map((errItem: any, idx: number) => (
-                                      <div
-                                        key={idx}
-                                        className="text-[10.5px] bg-amber-50/70 text-slate-700 border border-amber-200/60 p-2 rounded-lg font-mono leading-tight"
-                                      >
-                                        {errItem.error ||
-                                          errItem.message ||
-                                          JSON.stringify(errItem)}
-                                      </div>
-                                    ))}
+                                    {conn.errors.map(
+                                      (errItem: any, idx: number) => (
+                                        <div
+                                          key={idx}
+                                          className="text-[10.5px] bg-amber-50/70 text-slate-700 border border-amber-200/60 p-2 rounded-lg font-mono leading-tight"
+                                        >
+                                          {errItem.error ||
+                                            errItem.message ||
+                                            JSON.stringify(errItem)}
+                                        </div>
+                                      ),
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -838,238 +1041,261 @@ export default function ScanHistory() {
                   </div>
 
                   {/* Discovered Agents in this Scan */}
-                  {scanDetail?.agents && scanDetail.agents.length > 0 && (() => {
-                    const totalAgentsInScan = scanDetail.agents.length;
-                    const newAgentsInScan = scanDetail.agents.filter((a) => a.is_new).length;
-                    const displayedAgents =
-                      modalAgentFilter === "new"
-                        ? scanDetail.agents.filter((a) => a.is_new)
-                        : scanDetail.agents;
+                  {scanDetail?.agents &&
+                    scanDetail.agents.length > 0 &&
+                    (() => {
+                      const totalAgentsInScan = scanDetail.agents.length;
+                      const newAgentsInScan = scanDetail.agents.filter(
+                        (a) => a.is_new,
+                      ).length;
+                      const displayedAgents =
+                        modalAgentFilter === "new"
+                          ? scanDetail.agents.filter((a) => a.is_new)
+                          : scanDetail.agents;
 
-                    return (
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                              <Bot size={14} className="text-purple-600" />
-                              Agents Discovered ({totalAgentsInScan})
-                            </h3>
-                            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
-                              <button
-                                type="button"
-                                onClick={() => setModalAgentFilter("all")}
-                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                                  modalAgentFilter === "all"
-                                    ? "bg-white text-slate-900 shadow-xs"
-                                    : "text-slate-500 hover:text-slate-800"
-                                }`}
-                              >
-                                All ({totalAgentsInScan})
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setModalAgentFilter("new")}
-                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
-                                  modalAgentFilter === "new"
-                                    ? "bg-white text-emerald-700 shadow-xs font-extrabold"
-                                    : "text-slate-500 hover:text-emerald-700"
-                                }`}
-                              >
-                                <span>Newly Detected</span>
-                                <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]">
-                                  {newAgentsInScan}
-                                </span>
-                              </button>
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                                <Bot size={14} className="text-purple-600" />
+                                Agents Discovered ({totalAgentsInScan})
+                              </h3>
+                              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => setModalAgentFilter("all")}
+                                  className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                    modalAgentFilter === "all"
+                                      ? "bg-white text-slate-900 shadow-xs"
+                                      : "text-slate-500 hover:text-slate-800"
+                                  }`}
+                                >
+                                  All ({totalAgentsInScan})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setModalAgentFilter("new")}
+                                  className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                                    modalAgentFilter === "new"
+                                      ? "bg-white text-emerald-700 shadow-xs font-extrabold"
+                                      : "text-slate-500 hover:text-emerald-700"
+                                  }`}
+                                >
+                                  <span>Newly Detected</span>
+                                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]">
+                                    {newAgentsInScan}
+                                  </span>
+                                </button>
+                              </div>
                             </div>
+                            <button
+                              onClick={() => {
+                                handleCloseDetail();
+                                navigate("/agents");
+                              }}
+                              className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                              View in All Agents
+                              <ExternalLink size={11} />
+                            </button>
                           </div>
-                          <button
-                            onClick={() => {
-                              handleCloseDetail();
-                              navigate("/agents");
-                            }}
-                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
-                          >
-                            View in All Agents
-                            <ExternalLink size={11} />
-                          </button>
-                        </div>
 
-                        {displayedAgents.length === 0 ? (
-                          <div className="border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
-                            No net-new agents were introduced in this scan (all {totalAgentsInScan} were pre-existing).
-                          </div>
-                        ) : (
-                          <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
-                                <tr>
-                                  <th className="py-2.5 px-3">Agent Name</th>
-                                  <th className="py-2.5 px-3">Model</th>
-                                  <th className="py-2.5 px-3">Risk Level</th>
-                                  <th className="py-2.5 px-3 text-right">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {displayedAgents.map((agent) => (
-                                  <tr key={agent.id} className="hover:bg-slate-50/70">
-                                    <td className="py-2.5 px-3 font-bold text-slate-900">
-                                      <div className="flex items-center gap-1.5">
-                                        <span>{agent.name}</span>
-                                        {agent.is_new && (
-                                          <span className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                            NEW
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-                                    <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
-                                      {agent.model || "—"}
-                                    </td>
-                                    <td className="py-2.5 px-3">
-                                      <span
-                                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                          (agent.risk_score ?? 0) >= 70
-                                            ? "bg-rose-50 text-rose-700"
-                                            : (agent.risk_score ?? 0) >= 40
-                                            ? "bg-amber-50 text-amber-700"
-                                            : "bg-emerald-50 text-emerald-700"
-                                        }`}
-                                      >
-                                        Score: {agent.risk_score ?? "—"}
-                                      </span>
-                                    </td>
-                                    <td className="py-2.5 px-3 text-right">
-                                      <button
-                                        onClick={() => {
-                                          handleCloseDetail();
-                                          navigate(`/agents/${agent.id}`);
-                                        }}
-                                        className="text-blue-600 font-semibold hover:underline text-[11px]"
-                                      >
-                                        Inspect Agent
-                                      </button>
-                                    </td>
+                          {displayedAgents.length === 0 ? (
+                            <div className="border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
+                              No net-new agents were introduced in this scan
+                              (all {totalAgentsInScan} were pre-existing).
+                            </div>
+                          ) : (
+                            <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
+                                  <tr>
+                                    <th className="py-2.5 px-3">Agent Name</th>
+                                    <th className="py-2.5 px-3">Model</th>
+                                    <th className="py-2.5 px-3">Risk Level</th>
+                                    <th className="py-2.5 px-3 text-right">
+                                      Action
+                                    </th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {displayedAgents.map((agent) => (
+                                    <tr
+                                      key={agent.id}
+                                      className="hover:bg-slate-50/70"
+                                    >
+                                      <td className="py-2.5 px-3 font-bold text-slate-900">
+                                        <div className="flex items-center gap-1.5">
+                                          <span>{agent.name}</span>
+                                          {agent.is_new && (
+                                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              NEW
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
+                                        {agent.model || "—"}
+                                      </td>
+                                      <td className="py-2.5 px-3">
+                                        <span
+                                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                            (agent.risk_score ?? 0) >= 70
+                                              ? "bg-rose-50 text-rose-700"
+                                              : (agent.risk_score ?? 0) >= 40
+                                                ? "bg-amber-50 text-amber-700"
+                                                : "bg-emerald-50 text-emerald-700"
+                                          }`}
+                                        >
+                                          Score: {agent.risk_score ?? "—"}
+                                        </span>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        <button
+                                          onClick={() => {
+                                            handleCloseDetail();
+                                            navigate(`/agents/${agent.id}`);
+                                          }}
+                                          className="text-blue-600 font-semibold hover:underline text-[11px]"
+                                        >
+                                          Inspect Agent
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                   {/* Models Discovered in this Scan */}
-                  {scanDetail?.models && scanDetail.models.length > 0 && (() => {
-                    const totalModelsInScan = scanDetail.models.length;
-                    const newModelsInScan = scanDetail.models.filter((m) => m.is_new).length;
-                    const displayedModels =
-                      modalModelFilter === "new"
-                        ? scanDetail.models.filter((m) => m.is_new)
-                        : scanDetail.models;
+                  {scanDetail?.models &&
+                    scanDetail.models.length > 0 &&
+                    (() => {
+                      const totalModelsInScan = scanDetail.models.length;
+                      const newModelsInScan = scanDetail.models.filter(
+                        (m) => m.is_new,
+                      ).length;
+                      const displayedModels =
+                        modalModelFilter === "new"
+                          ? scanDetail.models.filter((m) => m.is_new)
+                          : scanDetail.models;
 
-                    return (
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                              <Box size={14} className="text-amber-600" />
-                              Models Identified ({totalModelsInScan})
-                            </h3>
-                            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
-                              <button
-                                type="button"
-                                onClick={() => setModalModelFilter("all")}
-                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
-                                  modalModelFilter === "all"
-                                    ? "bg-white text-slate-900 shadow-xs"
-                                    : "text-slate-500 hover:text-slate-800"
-                                }`}
-                              >
-                                All ({totalModelsInScan})
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setModalModelFilter("new")}
-                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
-                                  modalModelFilter === "new"
-                                    ? "bg-white text-emerald-700 shadow-xs font-extrabold"
-                                    : "text-slate-500 hover:text-emerald-700"
-                                }`}
-                              >
-                                <span>Newly Introduced</span>
-                                <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]">
-                                  {newModelsInScan}
-                                </span>
-                              </button>
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                                <Box size={14} className="text-amber-600" />
+                                Models Identified ({totalModelsInScan})
+                              </h3>
+                              <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => setModalModelFilter("all")}
+                                  className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                    modalModelFilter === "all"
+                                      ? "bg-white text-slate-900 shadow-xs"
+                                      : "text-slate-500 hover:text-slate-800"
+                                  }`}
+                                >
+                                  All ({totalModelsInScan})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setModalModelFilter("new")}
+                                  className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                                    modalModelFilter === "new"
+                                      ? "bg-white text-emerald-700 shadow-xs font-extrabold"
+                                      : "text-slate-500 hover:text-emerald-700"
+                                  }`}
+                                >
+                                  <span>Newly Introduced</span>
+                                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]">
+                                    {newModelsInScan}
+                                  </span>
+                                </button>
+                              </div>
                             </div>
+                            <button
+                              onClick={() => {
+                                handleCloseDetail();
+                                navigate("/models");
+                              }}
+                              className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                            >
+                              View in Models
+                              <ExternalLink size={11} />
+                            </button>
                           </div>
-                          <button
-                            onClick={() => {
-                              handleCloseDetail();
-                              navigate("/models");
-                            }}
-                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
-                          >
-                            View in Models
-                            <ExternalLink size={11} />
-                          </button>
-                        </div>
 
-                        {displayedModels.length === 0 ? (
-                          <div className="border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
-                            No net-new foundation models were introduced in this scan (all {totalModelsInScan} were already known).
-                          </div>
-                        ) : (
-                          <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
-                            <table className="w-full text-left text-xs">
-                              <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
-                                <tr>
-                                  <th className="py-2.5 px-3">Model Name</th>
-                                  <th className="py-2.5 px-3">Provider</th>
-                                  <th className="py-2.5 px-3">Type</th>
-                                  <th className="py-2.5 px-3 text-right">Action</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {displayedModels.map((model) => (
-                                  <tr key={model.id} className="hover:bg-slate-50/70">
-                                    <td className="py-2.5 px-3 font-bold text-slate-900">
-                                      <div className="flex items-center gap-1.5">
-                                        <span className="font-mono text-[11.5px]">{model.name}</span>
-                                        {model.is_new && (
-                                          <span className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                            NEW
-                                          </span>
-                                        )}
-                                      </div>
-                                    </td>
-                                    <td className="py-2.5 px-3 text-slate-600 capitalize">
-                                      {model.provider || "—"}
-                                    </td>
-                                    <td className="py-2.5 px-3 text-slate-600 uppercase text-[10px] font-semibold">
-                                      {model.model_type || "LLM"}
-                                    </td>
-                                    <td className="py-2.5 px-3 text-right">
-                                      <button
-                                        onClick={() => {
-                                          handleCloseDetail();
-                                          navigate("/models");
-                                        }}
-                                        className="text-blue-600 font-semibold hover:underline text-[11px]"
-                                      >
-                                        Inspect Model
-                                      </button>
-                                    </td>
+                          {displayedModels.length === 0 ? (
+                            <div className="border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
+                              No net-new foundation models were introduced in
+                              this scan (all {totalModelsInScan} were already
+                              known).
+                            </div>
+                          ) : (
+                            <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
+                              <table className="w-full text-left text-xs">
+                                <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
+                                  <tr>
+                                    <th className="py-2.5 px-3">Model Name</th>
+                                    <th className="py-2.5 px-3">Provider</th>
+                                    <th className="py-2.5 px-3">Type</th>
+                                    <th className="py-2.5 px-3 text-right">
+                                      Action
+                                    </th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {displayedModels.map((model) => (
+                                    <tr
+                                      key={model.id}
+                                      className="hover:bg-slate-50/70"
+                                    >
+                                      <td className="py-2.5 px-3 font-bold text-slate-900">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-mono text-[11.5px]">
+                                            {model.name}
+                                          </span>
+                                          {model.is_new && (
+                                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                              NEW
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="py-2.5 px-3 text-slate-600 capitalize">
+                                        {model.provider || "—"}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-slate-600 uppercase text-[10px] font-semibold">
+                                        {model.model_type || "LLM"}
+                                      </td>
+                                      <td className="py-2.5 px-3 text-right">
+                                        <button
+                                          onClick={() => {
+                                            handleCloseDetail();
+                                            navigate("/models");
+                                          }}
+                                          className="text-blue-600 font-semibold hover:underline text-[11px]"
+                                        >
+                                          Inspect Model
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </>
               )}
             </div>
