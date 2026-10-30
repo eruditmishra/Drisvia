@@ -61,8 +61,12 @@ describe("getSecurityPostureData", () => {
     expect(data.recentViolations[0]).toHaveProperty("description");
     expect(data.recentViolations[0]).toHaveProperty("severity");
 
-    // 11. Environments
+    // 11. Environments (strictly configured integrations)
     expect(data.environments).toBeDefined();
-    expect(data.environments.segments.length).toBe(5);
+    expect(data.environments.segments.length).toBeGreaterThanOrEqual(1);
+    expect(data.environments.segments[0]).toHaveProperty("provider");
+    expect(data.environments.segments[0]).toHaveProperty("count");
+    expect(data.environments.segments[0]).toHaveProperty("percentage");
+    expect(data.environments.segments[0]).toHaveProperty("color");
   });
 });

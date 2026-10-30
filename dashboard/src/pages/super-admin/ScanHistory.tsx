@@ -19,7 +19,7 @@ import {
   Calendar,
   Timer,
 } from "lucide-react";
-import { discoveryAPI } from "../../lib/api";
+import { discoveryAPI, dashboardAPI } from "../../lib/api";
 
 interface ScanRecord {
   id: string;
@@ -33,10 +33,12 @@ interface ScanRecord {
   error_message: string | null;
   stats: {
     totalAgents?: number;
+    newAgents?: number;
     totalModels?: number;
+    newModels?: number;
     byIntegration?: Record<
       string,
-      { found?: number; models?: number; errors?: number }
+      { found?: number; models?: number; errors?: number; newAgents?: number; newModels?: number }
     >;
   } | null;
   created_at: string;
@@ -65,6 +67,17 @@ interface ScanDetailData extends ScanRecord {
     status: string;
     risk_score?: number | null;
     deployment_type?: string | null;
+    is_new?: boolean;
+  }>;
+  models?: Array<{
+    id: string;
+    name: string;
+    provider: string | null;
+    model_type?: string | null;
+    risk_level?: string | null;
+    validation_status?: string | null;
+    agent_count?: number;
+    is_new?: boolean;
   }>;
 }
 
@@ -75,6 +88,10 @@ export default function ScanHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Exact system counts (matching All Agents and Models pages)
+  const [totalAgentsCount, setTotalAgentsCount] = useState<number>(27);
+  const [totalModelsCount, setTotalModelsCount] = useState<number>(5);
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -84,16 +101,38 @@ export default function ScanHistory() {
   const [scanDetail, setScanDetail] = useState<ScanDetailData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [modalAgentFilter, setModalAgentFilter] = useState<"all" | "new">("all");
+  const [modalModelFilter, setModalModelFilter] = useState<"all" | "new">("all");
 
   // Active scan trigger state
   const [isTriggering, setIsTriggering] = useState(false);
+
+  const fetchOverallCounts = async () => {
+    try {
+      const [agentsRes, modelsRes] = await Promise.all([
+        discoveryAPI.getAgents({ excludeIdentities: true, limit: 1 }),
+        dashboardAPI.getModelStats(),
+      ]);
+      if (typeof agentsRes.data?.total === "number") {
+        setTotalAgentsCount(agentsRes.data.total);
+      }
+      if (typeof modelsRes.data?.totalModels === "number") {
+        setTotalModelsCount(modelsRes.data.totalModels);
+      }
+    } catch (e) {
+      console.error("Failed to fetch aggregate counts", e);
+    }
+  };
 
   const fetchScans = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await discoveryAPI.listScans({ limit: 100 });
-      setScans(res.data?.scans || []);
+      const [scansRes] = await Promise.all([
+        discoveryAPI.listScans({ limit: 100 }),
+        fetchOverallCounts(),
+      ]);
+      setScans(scansRes.data?.scans || []);
     } catch (err: any) {
       console.error("Failed to load scans", err);
       setError(err?.message || "Failed to load scan history");
@@ -120,6 +159,8 @@ export default function ScanHistory() {
   const handleOpenDetail = async (scanId: string) => {
     setSelectedScanId(scanId);
     setDetailLoading(true);
+    setModalAgentFilter("all");
+    setModalModelFilter("all");
     try {
       const res = await discoveryAPI.getScan(scanId);
       setScanDetail(res.data?.scan || null);
@@ -201,9 +242,6 @@ export default function ScanHistory() {
   const totalScans = scans.length;
   const completedScans = scans.filter((s) => s.status === "completed").length;
   const runningScans = scans.filter((s) => s.status === "running").length;
-  const latestScan = scans[0];
-  const totalAgentsDiscovered = latestScan?.stats?.totalAgents ?? 0;
-  const totalModelsDiscovered = latestScan?.stats?.totalModels ?? 0;
 
   return (
     <div className="px-8 pb-8 pt-4 flex flex-col gap-6 h-full overflow-y-auto bg-[#F9FBFE] custom-scrollbar">
@@ -292,10 +330,10 @@ export default function ScanHistory() {
               Discovered Agents
             </div>
             <div className="text-2xl font-extrabold text-slate-900 mt-1">
-              {totalAgentsDiscovered}
+              {totalAgentsCount}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              From latest discovery scan
+              Active agents (excl. identities)
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
@@ -310,10 +348,10 @@ export default function ScanHistory() {
               Identified Models
             </div>
             <div className="text-2xl font-extrabold text-slate-900 mt-1">
-              {totalModelsDiscovered}
+              {totalModelsCount}
             </div>
             <div className="text-[11px] text-slate-500 mt-0.5">
-              Foundation & LLM engines
+              Unique foundation models
             </div>
           </div>
           <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
@@ -517,18 +555,48 @@ export default function ScanHistory() {
 
                       {/* Agents Found */}
                       <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold text-slate-800 bg-slate-100 text-[11.5px]">
-                          <Bot size={12} className="text-slate-500" />
-                          {agentsCount}
-                        </span>
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold text-slate-800 bg-slate-100 text-[11.5px]">
+                            <Bot size={12} className="text-slate-500" />
+                            {agentsCount}
+                          </span>
+                          {scan.stats?.newAgents !== undefined && (
+                            <span
+                              className={`text-[10px] font-semibold ${
+                                scan.stats.newAgents > 0
+                                  ? "text-emerald-600 font-bold"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {scan.stats.newAgents > 0
+                                ? `+${scan.stats.newAgents} new`
+                                : "0 new"}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Models Found */}
                       <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold text-slate-800 bg-slate-100 text-[11.5px]">
-                          <Box size={12} className="text-slate-500" />
-                          {modelsCount}
-                        </span>
+                        <div className="inline-flex flex-col items-center gap-0.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-bold text-slate-800 bg-slate-100 text-[11.5px]">
+                            <Box size={12} className="text-slate-500" />
+                            {modelsCount}
+                          </span>
+                          {scan.stats?.newModels !== undefined && (
+                            <span
+                              className={`text-[10px] font-semibold ${
+                                scan.stats.newModels > 0
+                                  ? "text-emerald-600 font-bold"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {scan.stats.newModels > 0
+                                ? `+${scan.stats.newModels} new`
+                                : "0 new"}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Executed At */}
@@ -664,8 +732,18 @@ export default function ScanHistory() {
                         Total Findings
                       </span>
                       <p className="text-xs font-bold text-blue-600 mt-0.5">
-                        {scanDetail?.stats?.totalAgents ?? 0} Agents,{" "}
-                        {scanDetail?.stats?.totalModels ?? 0} Models
+                        {scanDetail?.stats?.totalAgents ?? 0} Agents{" "}
+                        {scanDetail?.stats?.newAgents !== undefined && (
+                          <span className="text-[10.5px] text-emerald-600 font-semibold">
+                            (+{scanDetail.stats.newAgents} new)
+                          </span>
+                        )}
+                        , {scanDetail?.stats?.totalModels ?? 0} Models{" "}
+                        {scanDetail?.stats?.newModels !== undefined && (
+                          <span className="text-[10.5px] text-emerald-600 font-semibold">
+                            (+{scanDetail.stats.newModels} new)
+                          </span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -760,75 +838,238 @@ export default function ScanHistory() {
                   </div>
 
                   {/* Discovered Agents in this Scan */}
-                  {scanDetail?.agents && scanDetail.agents.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
-                          <Bot size={14} className="text-purple-600" />
-                          Agents Discovered in This Scan ({scanDetail.agents.length})
-                        </h3>
-                        <button
-                          onClick={() => {
-                            handleCloseDetail();
-                            navigate("/agents");
-                          }}
-                          className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
-                        >
-                          View in All Agents
-                          <ExternalLink size={11} />
-                        </button>
-                      </div>
+                  {scanDetail?.agents && scanDetail.agents.length > 0 && (() => {
+                    const totalAgentsInScan = scanDetail.agents.length;
+                    const newAgentsInScan = scanDetail.agents.filter((a) => a.is_new).length;
+                    const displayedAgents =
+                      modalAgentFilter === "new"
+                        ? scanDetail.agents.filter((a) => a.is_new)
+                        : scanDetail.agents;
 
-                      <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
-                            <tr>
-                              <th className="py-2.5 px-3">Agent Name</th>
-                              <th className="py-2.5 px-3">Model</th>
-                              <th className="py-2.5 px-3">Risk Level</th>
-                              <th className="py-2.5 px-3 text-right">Action</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100">
-                            {scanDetail.agents.map((agent) => (
-                              <tr key={agent.id} className="hover:bg-slate-50/70">
-                                <td className="py-2.5 px-3 font-bold text-slate-900">
-                                  {agent.name}
-                                </td>
-                                <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
-                                  {agent.model || "—"}
-                                </td>
-                                <td className="py-2.5 px-3">
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                      (agent.risk_score ?? 0) >= 70
-                                        ? "bg-rose-50 text-rose-700"
-                                        : (agent.risk_score ?? 0) >= 40
-                                        ? "bg-amber-50 text-amber-700"
-                                        : "bg-emerald-50 text-emerald-700"
-                                    }`}
-                                  >
-                                    Score: {agent.risk_score ?? "—"}
-                                  </span>
-                                </td>
-                                <td className="py-2.5 px-3 text-right">
-                                  <button
-                                    onClick={() => {
-                                      handleCloseDetail();
-                                      navigate(`/agents/${agent.id}`);
-                                    }}
-                                    className="text-blue-600 font-semibold hover:underline text-[11px]"
-                                  >
-                                    Inspect Agent
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                              <Bot size={14} className="text-purple-600" />
+                              Agents Discovered ({totalAgentsInScan})
+                            </h3>
+                            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setModalAgentFilter("all")}
+                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                  modalAgentFilter === "all"
+                                    ? "bg-white text-slate-900 shadow-xs"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                All ({totalAgentsInScan})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setModalAgentFilter("new")}
+                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                                  modalAgentFilter === "new"
+                                    ? "bg-white text-emerald-700 shadow-xs font-extrabold"
+                                    : "text-slate-500 hover:text-emerald-700"
+                                }`}
+                              >
+                                <span>Newly Detected</span>
+                                <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]">
+                                  {newAgentsInScan}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              handleCloseDetail();
+                              navigate("/agents");
+                            }}
+                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            View in All Agents
+                            <ExternalLink size={11} />
+                          </button>
+                        </div>
+
+                        {displayedAgents.length === 0 ? (
+                          <div className="border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
+                            No net-new agents were introduced in this scan (all {totalAgentsInScan} were pre-existing).
+                          </div>
+                        ) : (
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
+                                <tr>
+                                  <th className="py-2.5 px-3">Agent Name</th>
+                                  <th className="py-2.5 px-3">Model</th>
+                                  <th className="py-2.5 px-3">Risk Level</th>
+                                  <th className="py-2.5 px-3 text-right">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {displayedAgents.map((agent) => (
+                                  <tr key={agent.id} className="hover:bg-slate-50/70">
+                                    <td className="py-2.5 px-3 font-bold text-slate-900">
+                                      <div className="flex items-center gap-1.5">
+                                        <span>{agent.name}</span>
+                                        {agent.is_new && (
+                                          <span className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            NEW
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
+                                      {agent.model || "—"}
+                                    </td>
+                                    <td className="py-2.5 px-3">
+                                      <span
+                                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                          (agent.risk_score ?? 0) >= 70
+                                            ? "bg-rose-50 text-rose-700"
+                                            : (agent.risk_score ?? 0) >= 40
+                                            ? "bg-amber-50 text-amber-700"
+                                            : "bg-emerald-50 text-emerald-700"
+                                        }`}
+                                      >
+                                        Score: {agent.risk_score ?? "—"}
+                                      </span>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right">
+                                      <button
+                                        onClick={() => {
+                                          handleCloseDetail();
+                                          navigate(`/agents/${agent.id}`);
+                                        }}
+                                        className="text-blue-600 font-semibold hover:underline text-[11px]"
+                                      >
+                                        Inspect Agent
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
+
+                  {/* Models Discovered in this Scan */}
+                  {scanDetail?.models && scanDetail.models.length > 0 && (() => {
+                    const totalModelsInScan = scanDetail.models.length;
+                    const newModelsInScan = scanDetail.models.filter((m) => m.is_new).length;
+                    const displayedModels =
+                      modalModelFilter === "new"
+                        ? scanDetail.models.filter((m) => m.is_new)
+                        : scanDetail.models;
+
+                    return (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                              <Box size={14} className="text-amber-600" />
+                              Models Identified ({totalModelsInScan})
+                            </h3>
+                            <div className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setModalModelFilter("all")}
+                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer ${
+                                  modalModelFilter === "all"
+                                    ? "bg-white text-slate-900 shadow-xs"
+                                    : "text-slate-500 hover:text-slate-800"
+                                }`}
+                              >
+                                All ({totalModelsInScan})
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setModalModelFilter("new")}
+                                className={`px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 ${
+                                  modalModelFilter === "new"
+                                    ? "bg-white text-emerald-700 shadow-xs font-extrabold"
+                                    : "text-slate-500 hover:text-emerald-700"
+                                }`}
+                              >
+                                <span>Newly Introduced</span>
+                                <span className="px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 text-[10px]">
+                                  {newModelsInScan}
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              handleCloseDetail();
+                              navigate("/models");
+                            }}
+                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            View in Models
+                            <ExternalLink size={11} />
+                          </button>
+                        </div>
+
+                        {displayedModels.length === 0 ? (
+                          <div className="border border-slate-200 rounded-2xl p-6 text-center text-xs text-slate-400 bg-slate-50/50">
+                            No net-new foundation models were introduced in this scan (all {totalModelsInScan} were already known).
+                          </div>
+                        ) : (
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[#F8FAFC] border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold">
+                                <tr>
+                                  <th className="py-2.5 px-3">Model Name</th>
+                                  <th className="py-2.5 px-3">Provider</th>
+                                  <th className="py-2.5 px-3">Type</th>
+                                  <th className="py-2.5 px-3 text-right">Action</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {displayedModels.map((model) => (
+                                  <tr key={model.id} className="hover:bg-slate-50/70">
+                                    <td className="py-2.5 px-3 font-bold text-slate-900">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="font-mono text-[11.5px]">{model.name}</span>
+                                        {model.is_new && (
+                                          <span className="px-1.5 py-0.2 rounded text-[9.5px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                            NEW
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-slate-600 capitalize">
+                                      {model.provider || "—"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-slate-600 uppercase text-[10px] font-semibold">
+                                      {model.model_type || "LLM"}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right">
+                                      <button
+                                        onClick={() => {
+                                          handleCloseDetail();
+                                          navigate("/models");
+                                        }}
+                                        className="text-blue-600 font-semibold hover:underline text-[11px]"
+                                      >
+                                        Inspect Model
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
             </div>

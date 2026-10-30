@@ -16,12 +16,12 @@ export default function RecentViolationsCard({ data = [] }: Props) {
         <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Recent Violations
         </h3>
-        <button
+        {/* <button
           onClick={() => navigate("/agents")}
           className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer transition-colors"
         >
           View all &rarr;
-        </button>
+        </button> */}
       </div>
 
       {/* ── Violations List ── */}
@@ -30,7 +30,9 @@ export default function RecentViolationsCard({ data = [] }: Props) {
           <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-2">
             <ShieldAlert size={20} />
           </div>
-          <span className="text-xs font-semibold text-slate-700">No Active Violations</span>
+          <span className="text-xs font-semibold text-slate-700">
+            No Active Violations
+          </span>
           <span className="text-[11px] text-slate-400 mt-0.5">
             All scanned AI agents comply with current governance rules.
           </span>
@@ -46,25 +48,30 @@ export default function RecentViolationsCard({ data = [] }: Props) {
             const dotColor = isCrit
               ? "bg-rose-500 shadow-[0_0_0_3px_rgba(244,63,94,0.15)]"
               : isHigh
-              ? "bg-[#f97316] shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
-              : isMed
-              ? "bg-sky-500 shadow-[0_0_0_3px_rgba(14,165,233,0.15)]"
-              : "bg-slate-400";
+                ? "bg-[#f97316] shadow-[0_0_0_3px_rgba(249,115,22,0.15)]"
+                : isMed
+                  ? "bg-sky-500 shadow-[0_0_0_3px_rgba(14,165,233,0.15)]"
+                  : "bg-slate-400";
 
             // Severity badge styling
             const badgeStyle = isCrit
               ? "bg-rose-50 text-rose-600 border-rose-200"
               : isHigh
-              ? "bg-amber-50/90 text-amber-600 border-amber-200"
-              : isMed
-              ? "bg-sky-50 text-sky-600 border-sky-200"
-              : "bg-slate-50 text-slate-600 border-slate-200";
+                ? "bg-amber-50/90 text-amber-600 border-amber-200"
+                : isMed
+                  ? "bg-sky-50 text-sky-600 border-sky-200"
+                  : "bg-slate-50 text-slate-600 border-slate-200";
 
             return (
               <div
                 key={item.id}
                 onClick={() => {
-                  if (item.agentId && item.agentId !== "agent-1" && item.agentId !== "agent-2" && item.agentId !== "agent-3") {
+                  if (
+                    item.agentId &&
+                    item.agentId !== "agent-1" &&
+                    item.agentId !== "agent-2" &&
+                    item.agentId !== "agent-3"
+                  ) {
                     navigate(`/agents/${item.agentId}`);
                   } else {
                     navigate("/agents");
@@ -75,7 +82,9 @@ export default function RecentViolationsCard({ data = [] }: Props) {
                 {/* Left side: Dot + (Name & Tag on Line 1, Description on Line 2) */}
                 <div className="flex items-start gap-2.5 min-w-0 flex-1">
                   <div className="pt-1.5 shrink-0">
-                    <span className={`block w-2 h-2 rounded-full ${dotColor}`} />
+                    <span
+                      className={`block w-2 h-2 rounded-full ${dotColor}`}
+                    />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 min-w-0">
