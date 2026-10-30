@@ -795,8 +795,62 @@ export async function getSecurityPostureData(
     overallScoreDelta = null;
   }
 
-  // Generate 5-point trend across period
-  const trendPoints = generateTrendPoints(overallScore, period);
+  // 1. Record today's actual posture snapshot into posture_daily_snapshots table
+  try {
+    const upsertSnapshotQuery = `
+      INSERT INTO posture_daily_snapshots (
+        tenant_id, snapshot_date, overall_score, total_agents, critical_count, high_count, shadow_count
+      ) VALUES ($1, CURRENT_DATE, $2, $3, $4, $5, $6)
+      ON CONFLICT (COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid), snapshot_date)
+      DO UPDATE SET 
+        overall_score = EXCLUDED.overall_score,
+        total_agents = EXCLUDED.total_agents,
+        critical_count = EXCLUDED.critical_count,
+        high_count = EXCLUDED.high_count,
+        shadow_count = EXCLUDED.shadow_count;
+    `;
+    await db.query(upsertSnapshotQuery, [
+      tenantId || null,
+      overallScore,
+      totalAgents,
+      riskDist.Critical,
+      riskDist.High,
+      shadowCount,
+    ]);
+  } catch (err) {
+    // Non-blocking snapshot upsert error
+  }
+
+  // 2. Query real historical snapshots across selected period
+  // Only plot a trend if at least 2 distinct historical snapshot dates exist in the database!
+  let trendPoints: Array<{ date: string; score: number }> = [];
+  try {
+    const trendQuery = tenantId
+      ? `SELECT snapshot_date, overall_score 
+         FROM posture_daily_snapshots 
+         WHERE tenant_id = $1 AND snapshot_date >= CURRENT_DATE - ($2 || ' days')::interval
+         ORDER BY snapshot_date ASC`
+      : `SELECT snapshot_date, overall_score 
+         FROM posture_daily_snapshots 
+         WHERE tenant_id IS NULL AND snapshot_date >= CURRENT_DATE - ($1 || ' days')::interval
+         ORDER BY snapshot_date ASC`;
+
+    const trendRes = await db.query(trendQuery, tenantId ? [tenantId, periodDays] : [periodDays]);
+    if (trendRes.rows.length >= 2) {
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      trendPoints = trendRes.rows.map((row) => {
+        const d = new Date(row.snapshot_date);
+        return {
+          date: `${months[d.getUTCMonth()]} ${d.getUTCDate()}`,
+          score: Number(row.overall_score),
+        };
+      });
+    } else {
+      trendPoints = [];
+    }
+  } catch (err) {
+    trendPoints = [];
+  }
 
   return {
     overallRisk: {
@@ -944,39 +998,9 @@ function formatModelDisplayName(raw: string): string {
   return raw;
 }
 
-function generateTrendPoints(finalScore: number, period: string) {
-  const points = 5;
-  const daysTotal = period === "7d" ? 7 : period === "90d" ? 90 : 30;
-  const intervalDays = Math.floor(daysTotal / (points - 1));
-  const now = new Date();
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  // Starting score was lower, rising up to current score
-  const startScore = Math.max(10, Math.round(finalScore * 0.35));
-  const diff = finalScore - startScore;
-
-  return Array.from({ length: points }).map((_, i) => {
-    const d = new Date(now.getTime() - (points - 1 - i) * intervalDays * 86400000);
-    const dateLabel = `${months[d.getMonth()]} ${d.getDate()}`;
-    const progress = i / (points - 1);
-    // Smooth easing curve
-    const score = Math.round(startScore + diff * Math.pow(progress, 1.2));
-    return {
-      date: dateLabel,
-      score,
-    };
-  });
-}
-
 function generateBaselinePostureData(period: string, environment: string) {
   const totalAgents = 148;
-  const trendPoints = [
-    { date: "Sep 8", score: 20 },
-    { date: "Sep 15", score: 26 },
-    { date: "Sep 22", score: 38 },
-    { date: "Sep 29", score: 49 },
-    { date: "Oct 6", score: 64 },
-  ];
+  const trendPoints: Array<{ date: string; score: number }> = [];
 
   return {
     overallRisk: {

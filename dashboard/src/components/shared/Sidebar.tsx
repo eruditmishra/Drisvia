@@ -1,40 +1,104 @@
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutGrid,
   Bot,
-  ShieldAlert,
+  Box,
+  Radar,
   Share2,
-  ShieldCheck,
-  FileText,
+  Users,
   Settings,
+  FileText,
+  ChevronDown,
   ArrowRight,
 } from "lucide-react";
 import { usePermission } from "../../hooks/usePermission";
 
 export default function Sidebar() {
+  const location = useLocation();
+
+  // ── Permissions ──
   const canViewDashboard = usePermission("dashboard", "view");
   const canViewAgents = usePermission("agents", "view");
-  const canViewIntegrations = usePermission("integrations", "view");
+  const canViewShadowAgents = usePermission("shadow_agents", "view");
+  const canViewVerifiedAgents = usePermission("verified_agents", "view");
+  const canViewModels = usePermission("models", "view");
   const canViewAssessments = usePermission("assessments", "view");
+  const canViewIntegrations = usePermission("integrations", "view");
+  const canViewUsers = usePermission("user_management", "view");
+  const canViewSso = usePermission("sso_config", "view");
+  const canViewAutoDiscovery = usePermission("auto_discovery_config", "view");
   const canViewAuditLogs = usePermission("agent_audit_logs", "view");
-  const canViewSettings = usePermission("sso_config", "view") || usePermission("user_management", "view") || usePermission("auto_discovery_config", "view");
 
-  const activeClass =
-    "bg-[#EAF2FF] text-[#2563EB] font-bold shadow-xs";
+  const canViewAnyAgents = canViewAgents || canViewShadowAgents || canViewVerifiedAgents;
+  const canViewIam = canViewUsers || canViewSso;
+  const canViewSettings = canViewAutoDiscovery;
+
+  // ── Accordion State: sub-options toggle on clicking main option ──
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>(() => ({
+    agents: location.pathname.startsWith("/agents"),
+    scans: location.pathname.startsWith("/assessments"),
+    iam:
+      location.pathname.startsWith("/user-management") ||
+      location.pathname.startsWith("/sso"),
+    settings: location.pathname.startsWith("/auto-discovery"),
+  }));
+
+  const toggleMenu = (key: string) => {
+    setOpenMenus((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  // ── Styling Classes ──
+  const activeClass = "bg-[#EAF2FF] text-[#2563EB] font-bold shadow-xs";
   const inactiveClass =
     "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium";
 
-  const navClass = (isActive: boolean) =>
+  const directNavClass = (isActive: boolean) =>
     `flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13px] transition-all duration-150 ${
       isActive ? activeClass : inactiveClass
     }`;
 
+  const parentButtonClass = (isChildActive: boolean, isOpen: boolean) =>
+    `flex items-center justify-between w-full px-3 py-2.5 rounded-xl text-[13px] transition-all duration-150 cursor-pointer ${
+      isChildActive && !isOpen
+        ? "bg-[#EAF2FF]/70 text-[#2563EB] font-semibold"
+        : isChildActive
+        ? "text-[#2563EB] font-semibold"
+        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 font-medium"
+    }`;
+
+  const subNavClass = (isActive: boolean) =>
+    `flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12.5px] transition-all duration-150 group ${
+      isActive
+        ? "bg-[#EAF2FF] text-[#2563EB] font-bold"
+        : "text-slate-500 hover:text-slate-900 hover:bg-slate-50/80 font-medium"
+    }`;
+
+  // ── Active group indicators ──
+  const isAgentsActive = location.pathname.startsWith("/agents");
+  const isScansActive = location.pathname.startsWith("/assessments");
+  const isIamActive =
+    location.pathname.startsWith("/user-management") ||
+    location.pathname.startsWith("/sso");
+  const isSettingsActive = location.pathname.startsWith("/auto-discovery");
+
   return (
-    <aside className="w-[230px] min-w-[230px] h-screen flex flex-col border-r border-slate-200/90 bg-white relative z-10 shrink-0 select-none">
+    <aside className="w-[230px] min-w-[230px] h-screen flex flex-col bg-[#F2F9FD] relative z-10 shrink-0 select-none">
       {/* ── Brand Logo Header ── */}
       <div className="px-5 pt-6 pb-5 flex items-center gap-2.5">
         <div className="w-[32px] h-[32px] rounded-lg bg-blue-600 flex items-center justify-center shrink-0 shadow-sm text-white">
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            className="w-5 h-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
           </svg>
         </div>
@@ -49,51 +113,263 @@ export default function Sidebar() {
       </div>
 
       {/* ── Main Navigation List ── */}
-      <nav className="flex-1 overflow-y-auto px-3.5 py-2 flex flex-col gap-1.5 custom-scrollbar">
+      <nav className="flex-1 overflow-y-auto px-3.5 py-2 flex flex-col gap-1 custom-scrollbar">
+        {/* 1. Dashboard */}
         {canViewDashboard && (
-          <NavLink to="/dashboard" className={({ isActive }) => navClass(isActive)}>
+          <NavLink
+            to="/dashboard"
+            className={({ isActive }) => directNavClass(isActive)}
+          >
             <LayoutGrid size={18} className="shrink-0" />
             <span>Dashboard</span>
           </NavLink>
         )}
 
-        {canViewAgents && (
-          <NavLink to="/agents" className={({ isActive }) => navClass(isActive)}>
-            <Bot size={18} className="shrink-0" />
-            <span>Agents</span>
+        {/* 2. Agents (Expandable) */}
+        {canViewAnyAgents && (
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => toggleMenu("agents")}
+              className={parentButtonClass(isAgentsActive, openMenus.agents)}
+            >
+              <div className="flex items-center gap-3">
+                <Bot size={18} className="shrink-0" />
+                <span>Agents</span>
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  openMenus.agents ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {openMenus.agents && (
+              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                {canViewAgents && (
+                  <NavLink
+                    to="/agents"
+                    end
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                        location.pathname === "/agents"
+                          ? "bg-[#2563EB]"
+                          : "bg-slate-300 group-hover:bg-slate-400"
+                      }`}
+                    />
+                    <span>All Agents</span>
+                  </NavLink>
+                )}
+
+                {canViewShadowAgents && (
+                  <NavLink
+                    to="/agents/shadow"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                        location.pathname.startsWith("/agents/shadow")
+                          ? "bg-[#2563EB]"
+                          : "bg-slate-300 group-hover:bg-slate-400"
+                      }`}
+                    />
+                    <span>Shadow Agents</span>
+                  </NavLink>
+                )}
+
+                {canViewVerifiedAgents && (
+                  <NavLink
+                    to="/agents/verified"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                        location.pathname.startsWith("/agents/verified")
+                          ? "bg-[#2563EB]"
+                          : "bg-slate-300 group-hover:bg-slate-400"
+                      }`}
+                    />
+                    <span>Verified Agents</span>
+                  </NavLink>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 3. Models */}
+        {canViewModels && (
+          <NavLink
+            to="/models"
+            className={({ isActive }) => directNavClass(isActive)}
+          >
+            <Box size={18} className="shrink-0" />
+            <span>Models</span>
           </NavLink>
         )}
 
-        <NavLink to="/agents?filter=risks" className={({ isActive }) => navClass(isActive)}>
-          <ShieldAlert size={18} className="shrink-0" />
-          <span>Risks & Findings</span>
-        </NavLink>
+        {/* 4. Scans (Expandable -> Compliance) */}
+        {canViewAssessments && (
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => toggleMenu("scans")}
+              className={parentButtonClass(isScansActive, openMenus.scans)}
+            >
+              <div className="flex items-center gap-3">
+                <Radar size={18} className="shrink-0" />
+                <span>Scans</span>
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  openMenus.scans ? "rotate-180" : ""
+                }`}
+              />
+            </button>
 
+            {openMenus.scans && (
+              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                <NavLink
+                  to="/assessments"
+                  className={({ isActive }) => subNavClass(isActive)}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                      isScansActive
+                        ? "bg-[#2563EB]"
+                        : "bg-slate-300 group-hover:bg-slate-400"
+                    }`}
+                  />
+                  <span>Compliance</span>
+                </NavLink>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 5. Integrations */}
         {canViewIntegrations && (
-          <NavLink to="/integrations" className={({ isActive }) => navClass(isActive)}>
+          <NavLink
+            to="/integrations"
+            className={({ isActive }) => directNavClass(isActive)}
+          >
             <Share2 size={18} className="shrink-0" />
             <span>Integrations</span>
           </NavLink>
         )}
 
-        {canViewAssessments && (
-          <NavLink to="/assessments" className={({ isActive }) => navClass(isActive)}>
-            <ShieldCheck size={18} className="shrink-0" />
-            <span>Compliance</span>
-          </NavLink>
+        {/* 6. IAM (Expandable -> Users, SSO Integration) */}
+        {canViewIam && (
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => toggleMenu("iam")}
+              className={parentButtonClass(isIamActive, openMenus.iam)}
+            >
+              <div className="flex items-center gap-3">
+                <Users size={18} className="shrink-0" />
+                <span>IAM</span>
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  openMenus.iam ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {openMenus.iam && (
+              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                {canViewUsers && (
+                  <NavLink
+                    to="/user-management"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                        location.pathname.startsWith("/user-management")
+                          ? "bg-[#2563EB]"
+                          : "bg-slate-300 group-hover:bg-slate-400"
+                      }`}
+                    />
+                    <span>Users</span>
+                  </NavLink>
+                )}
+
+                {canViewSso && (
+                  <NavLink
+                    to="/sso"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                        location.pathname.startsWith("/sso")
+                          ? "bg-[#2563EB]"
+                          : "bg-slate-300 group-hover:bg-slate-400"
+                      }`}
+                    />
+                    <span>SSO Integration</span>
+                  </NavLink>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
-        {canViewAuditLogs && (
-          <NavLink to="/audit-logs" className={({ isActive }) => navClass(isActive)}>
-            <FileText size={18} className="shrink-0" />
-            <span>Reports</span>
-          </NavLink>
-        )}
-
+        {/* 7. Settings (Expandable -> Auto Scans) */}
         {canViewSettings && (
-          <NavLink to="/sso" className={({ isActive }) => navClass(isActive)}>
-            <Settings size={18} className="shrink-0" />
-            <span>Settings</span>
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={() => toggleMenu("settings")}
+              className={parentButtonClass(isSettingsActive, openMenus.settings)}
+            >
+              <div className="flex items-center gap-3">
+                <Settings size={18} className="shrink-0" />
+                <span>Settings</span>
+              </div>
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${
+                  openMenus.settings ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {openMenus.settings && (
+              <div className="flex flex-col gap-0.5 pl-4 pr-1 py-1 mt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                {canViewAutoDiscovery && (
+                  <NavLink
+                    to="/auto-discovery"
+                    className={({ isActive }) => subNavClass(isActive)}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                        location.pathname.startsWith("/auto-discovery")
+                          ? "bg-[#2563EB]"
+                          : "bg-slate-300 group-hover:bg-slate-400"
+                      }`}
+                    />
+                    <span>Auto Scans</span>
+                  </NavLink>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 8. Audit Logs */}
+        {canViewAuditLogs && (
+          <NavLink
+            to="/audit-logs"
+            className={({ isActive }) => directNavClass(isActive)}
+          >
+            <FileText size={18} className="shrink-0" />
+            <span>Audit Logs</span>
           </NavLink>
         )}
       </nav>

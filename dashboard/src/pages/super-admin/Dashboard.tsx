@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { dashboardAPI } from "../../lib/api";
 import { useDashboardFilter } from "../../store/useDashboardFilter";
 import type { PostureDashboardData } from "../../types/dashboard";
+import useStore from "../../store/useStore";
 
 import OverallRiskScoreCard from "../../components/super_admin/posture/OverallRiskScoreCard";
 import PostureKpiCards from "../../components/super_admin/posture/PostureKpiCards";
@@ -17,13 +18,59 @@ import RiskScoreTrendCard from "../../components/super_admin/posture/RiskScoreTr
 import RecentViolationsCard from "../../components/super_admin/posture/RecentViolationsCard";
 import EnvironmentsCard from "../../components/super_admin/posture/EnvironmentsCard";
 
+interface GreetingInfo {
+  greeting: string;
+  subMessage: string;
+}
+
+function getGreetingInfo(): GreetingInfo {
+  const hour = new Date().getHours();
+  // Morning: 05:00 - 11:59
+  if (hour >= 5 && hour < 12) {
+    return {
+      greeting: "Good morning",
+      subMessage: "Ready to get started?",
+    };
+  }
+  // Afternoon: 12:00 - 16:59
+  if (hour >= 12 && hour < 17) {
+    return {
+      greeting: "Good afternoon",
+      subMessage: "Here's your security overview.",
+    };
+  }
+  // Evening: 17:00 - 22:59
+  if (hour >= 17 && hour < 23) {
+    return {
+      greeting: "Good evening",
+      subMessage: "Here's what needs your attention.",
+    };
+  }
+  // Late night: 23:00 - 04:59
+  return {
+    greeting: "Welcome back",
+    subMessage: "Your security overview is ready.",
+  };
+}
+
+function getFirstName(fullName?: string): string {
+  if (!fullName) return "Admin";
+  const trimmed = fullName.trim();
+  if (!trimmed) return "Admin";
+  const first = trimmed.split(/\s+/)[0];
+  return first.charAt(0).toUpperCase() + first.slice(1);
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { period, environment, setPeriod, setEnvironment } = useDashboardFilter();
-
+  const { period, environment, setPeriod, setEnvironment } =
+    useDashboardFilter();
+  const user = useStore((s) => s.user);
   const [data, setData] = useState<PostureDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const greetingInfo = getGreetingInfo();
+  const firstName = getFirstName(user?.name);
 
   const fetchPosture = () => {
     setLoading(true);
@@ -89,14 +136,14 @@ export default function Dashboard() {
   if (!data) return null;
 
   return (
-    <div className="px-8 pb-8 pt-3 flex flex-col gap-6 h-full overflow-y-auto bg-[#F8FAFC] custom-scrollbar">
+    <div className="px-8 pb-8 pt-3 flex flex-col gap-6 h-full overflow-y-auto bg-[#F9FBFE] custom-scrollbar">
       {/* ── Page Header ── */}
       <div className="flex flex-col">
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-          AI Security Posture
+        <h1 className="text-2xl font-bold tracking-tight text-[#1D2329]">
+          {greetingInfo.greeting}, {firstName}
         </h1>
-        <p className="text-xs text-slate-500 mt-1">
-          Real-time visibility into your AI agents, risks, and governance across the organization.
+        <p className="text-xs text-slate-500 mt-0.5">
+          {greetingInfo.subMessage}
         </p>
       </div>
 
@@ -106,7 +153,10 @@ export default function Dashboard() {
           <OverallRiskScoreCard data={data.overallRisk} />
         </div>
         <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <PostureKpiCards kpis={data.kpis} onNavigate={(path) => navigate(path)} />
+          <PostureKpiCards
+            kpis={data.kpis}
+            onNavigate={(path) => navigate(path)}
+          />
         </div>
       </div>
 
