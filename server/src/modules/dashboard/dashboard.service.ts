@@ -398,27 +398,14 @@ export async function getSecurityPostureData(
       agent.domains?.data_access?.has_phi === true;
     if (hasSensitive) sensitiveAccessCount++;
 
-    // Risk Drivers
-    if (!isApproved || !hasOwner) governanceGapsCount++;
-    if (agent.domains?.permissions?.over_permissioned === true || (agent.permissions && agent.permissions.length > 5)) {
-      excessivePermissionsCount++;
-    }
-    if (hasSensitive) sensitiveDataAccessCount++;
-    if (agent.internet_access || agent.domains?.network?.internet_access?.value === true) {
-      connectivityExposureCount++;
-    }
-    if (agent.domains?.guardrails?.present === false || agent.domains?.human_oversight?.human_approval_required?.value === false) {
-      missingControlsCount++;
-    }
-
     // Capability exposure
     const tools = agent.domains?.tools?.items || agent.tools || [];
     const hasCodeExec = tools.some((t: any) => t.risk_flags?.can_execute_code || t.can_execute_code) || agent.execution_capability === "code_execution";
     const hasSecrets = agent.api_keys_detected || agent.secrets_detected;
-    const hasExternalApis = tools.some((t: any) => t.risk_flags?.network_access || t.type === "http" || t.type === "api") || agent.internet_access;
+    const hasExternalApis = tools.some((t: any) => t.risk_flags?.can_call_external_apis || t.risk_flags?.network_access || t.type === "http" || t.type === "api") || agent.internet_access;
     const hasDb = agent.database_access;
     const hasFs = agent.filesystem_access;
-    const hasNet = agent.internet_access;
+    const hasNet = agent.internet_access || agent.domains?.network?.internet_access?.value === true;
     const hasModify = tools.some((t: any) => t.risk_flags?.can_modify_state || t.can_modify_state);
     const hasMcp = (agent.mcp_connections && agent.mcp_connections.length > 0) || (agent.domains?.inter_agent?.mcp_servers && agent.domains.inter_agent.mcp_servers.length > 0);
 
@@ -431,6 +418,17 @@ export async function getSecurityPostureData(
     if (hasModify) capabilityCounts.modify_state++;
     if (hasMcp) capabilityCounts.mcp_connections++;
 
+    // Risk Drivers
+    if (!isApproved || !hasOwner) governanceGapsCount++;
+    if (hasCodeExec || hasModify || agent.domains?.permissions?.over_permissioned === true || (agent.permissions && agent.permissions.length > 5)) {
+      excessivePermissionsCount++;
+    }
+    if (hasSensitive) sensitiveDataAccessCount++;
+    if (hasNet || hasExternalApis) connectivityExposureCount++;
+    if (agent.domains?.guardrails?.present !== true || agent.domains?.human_oversight?.human_approval_required?.value !== true) {
+      missingControlsCount++;
+    }
+
     // OWASP Framework controls
     const owaspControls = agent.frameworks?.owasp_ai_agents_2026?.controls || {};
     for (const [code, cat] of Object.entries(owaspControls) as [string, any][]) {
@@ -440,19 +438,20 @@ export async function getSecurityPostureData(
       }
     }
 
-    // Models Aggregation
-    const modelName = agent.model ? agent.model.trim() : "Unknown Model";
-    if (!modelsMap[modelName]) {
-      modelsMap[modelName] = { count: 0, totalScore: 0 };
+    // Models Aggregation with clean formatting
+    const rawModelName = agent.model ? agent.model.trim() : "Unknown Model";
+    const cleanModelName = formatModelDisplayName(rawModelName);
+    if (!modelsMap[cleanModelName]) {
+      modelsMap[cleanModelName] = { count: 0, totalScore: 0 };
     }
-    modelsMap[modelName].count++;
-    modelsMap[modelName].totalScore += risk.finalScore;
+    modelsMap[cleanModelName].count++;
+    modelsMap[cleanModelName].totalScore += risk.finalScore;
 
     // Environments Aggregation
     const providerStr = (agent.cloud_provider || agent.provider || "").toLowerCase();
     if (providerStr.includes("aws")) {
       envMap.AWS++;
-    } else if (providerStr.includes("azure")) {
+    } else if (providerStr.includes("azure") || providerStr.includes("entra")) {
       envMap.Azure++;
     } else if (providerStr.includes("gcp") || providerStr.includes("google")) {
       envMap["Google Cloud"]++;
@@ -463,7 +462,7 @@ export async function getSecurityPostureData(
     }
   }
 
-  const overallScore = totalAgents > 0 ? Math.round(totalCalculatedRiskScore / totalAgents) : 64;
+  const overallScore = totalAgents > 0 ? Math.round(totalCalculatedRiskScore / totalAgents) : 43;
   const overallLevel = overallScore >= 75 ? "Critical" : overallScore >= 50 ? "Elevated Risk" : overallScore >= 25 ? "Moderate" : "Low";
 
   // Top Models
@@ -479,6 +478,7 @@ export async function getSecurityPostureData(
       if (lower.includes("claude") || lower.includes("anthropic")) provider = "Anthropic";
       else if (lower.includes("gpt") || lower.includes("openai")) provider = "OpenAI";
       else if (lower.includes("gemini") || lower.includes("google")) provider = "Google";
+      else if (lower.includes("aws")) provider = "AWS";
 
       return {
         modelName,
@@ -490,7 +490,7 @@ export async function getSecurityPostureData(
     .sort((a, b) => b.agentCount - a.agentCount)
     .slice(0, 6);
 
-  // Fetch recent security events from drift and audit_logs
+  // Fetch recent security events from agent_security_drift or audit_logs
   let recentEvents: any[] = [];
   try {
     const driftQuery = `
@@ -507,21 +507,48 @@ export async function getSecurityPostureData(
       LIMIT 5
     `;
     const driftRes = await db.query(driftQuery, tenantId ? [tenantId] : []);
-    recentEvents = driftRes.rows.map((row) => {
-      let severity: "Critical" | "High" | "Medium" = "Medium";
-      if (row.change_type.includes("high_risk") || row.change_type.includes("escalation")) {
-        severity = "Critical";
-      } else if (row.change_type.includes("secret") || row.change_type.includes("permission")) {
-        severity = "High";
+    if (driftRes.rows.length > 0) {
+      recentEvents = driftRes.rows.map((row) => {
+        let severity: "Critical" | "High" | "Medium" = "Medium";
+        if (row.change_type.includes("high_risk") || row.change_type.includes("escalation")) {
+          severity = "Critical";
+        } else if (row.change_type.includes("secret") || row.change_type.includes("permission")) {
+          severity = "High";
+        }
+        return {
+          id: row.id,
+          timeAgo: formatRelativeTime(new Date(row.detected_at)),
+          title: row.summary,
+          agentName: row.agent_name || "unknown-agent",
+          severity,
+        };
+      });
+    } else {
+      // Query real audit logs
+      const auditRes = await db.query(
+        `SELECT id, created_at, event_type, summary, COALESCE(entity_name, 'System') as entity_name
+         FROM audit_logs
+         WHERE (${tenantId ? "tenant_id = $1" : "tenant_id IS NULL"})
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        tenantId ? [tenantId] : []
+      );
+      if (auditRes.rows.length > 0) {
+        recentEvents = auditRes.rows.map((row) => {
+          let severity: "Critical" | "High" | "Medium" = "Medium";
+          const ev = (row.event_type || "").toLowerCase();
+          if (ev.includes("security") || ev.includes("vulnerability") || ev.includes("fail")) severity = "Critical";
+          else if (ev.includes("shadow") || ev.includes("unapproved") || ev.includes("flag")) severity = "High";
+          return {
+            id: row.id,
+            timeAgo: formatRelativeTime(new Date(row.created_at)),
+            title: row.summary || row.event_type,
+            agentName: row.entity_name || "discovery-scanner",
+            severity,
+          };
+        });
       }
-      return {
-        id: row.id,
-        timeAgo: formatRelativeTime(new Date(row.detected_at)),
-        title: row.summary,
-        agentName: row.agent_name || "unknown-agent",
-        severity,
-      };
-    });
+    }
   } catch (e) {
     recentEvents = [];
   }
@@ -536,6 +563,83 @@ export async function getSecurityPostureData(
     ];
   }
 
+  // Calculate actual delta details - only keep if actual details exist in historical baseline
+  const periodDays = period === "7d" ? 7 : period === "90d" ? 90 : 30;
+  let criticalDelta: number | null = null;
+  let highDelta: number | null = null;
+  let shadowDelta: number | null = null;
+  let sensitiveDelta: number | null = null;
+  let overallScoreDelta: number | null = null;
+
+  try {
+    const baselineCheck = tenantId
+      ? await db.query(
+          `SELECT count(*) as count FROM discovered_agents WHERE tenant_id = $1 AND created_at < NOW() - ($2 || ' days')::interval`,
+          [tenantId, periodDays]
+        )
+      : await db.query(
+          `SELECT count(*) as count FROM discovered_agents WHERE tenant_id IS NULL AND created_at < NOW() - ($1 || ' days')::interval`,
+          [periodDays]
+        );
+    const countBefore = parseInt(baselineCheck.rows[0]?.count || "0", 10);
+
+    // Only calculate deltas if a historical baseline actually exists before this window
+    if (countBefore > 0) {
+      const currentQuery = tenantId
+        ? `SELECT 
+             COUNT(*) FILTER (WHERE risk_score >= 75) as critical_count,
+             COUNT(*) FILTER (WHERE risk_score >= 50 AND risk_score < 75) as high_count,
+             COUNT(*) FILTER (WHERE status NOT IN ('approved', 'conditionally_approved')) as shadow_count,
+             COUNT(*) FILTER (WHERE api_keys_detected OR secrets_detected OR database_access) as sensitive_count
+           FROM discovered_agents
+           WHERE tenant_id = $1`
+        : `SELECT 
+             COUNT(*) FILTER (WHERE risk_score >= 75) as critical_count,
+             COUNT(*) FILTER (WHERE risk_score >= 50 AND risk_score < 75) as high_count,
+             COUNT(*) FILTER (WHERE status NOT IN ('approved', 'conditionally_approved')) as shadow_count,
+             COUNT(*) FILTER (WHERE api_keys_detected OR secrets_detected OR database_access) as sensitive_count
+           FROM discovered_agents
+           WHERE tenant_id IS NULL`;
+
+      const baselineQuery = tenantId
+        ? `SELECT 
+             COUNT(*) FILTER (WHERE risk_score >= 75) as critical_count,
+             COUNT(*) FILTER (WHERE risk_score >= 50 AND risk_score < 75) as high_count,
+             COUNT(*) FILTER (WHERE status NOT IN ('approved', 'conditionally_approved')) as shadow_count,
+             COUNT(*) FILTER (WHERE api_keys_detected OR secrets_detected OR database_access) as sensitive_count
+           FROM discovered_agents
+           WHERE tenant_id = $1 AND created_at < NOW() - ($2 || ' days')::interval`
+        : `SELECT 
+             COUNT(*) FILTER (WHERE risk_score >= 75) as critical_count,
+             COUNT(*) FILTER (WHERE risk_score >= 50 AND risk_score < 75) as high_count,
+             COUNT(*) FILTER (WHERE status NOT IN ('approved', 'conditionally_approved')) as shadow_count,
+             COUNT(*) FILTER (WHERE api_keys_detected OR secrets_detected OR database_access) as sensitive_count
+           FROM discovered_agents
+           WHERE tenant_id IS NULL AND created_at < NOW() - ($1 || ' days')::interval`;
+
+      const [currentRes, baselineRes] = await Promise.all([
+        db.query(currentQuery, tenantId ? [tenantId] : []),
+        db.query(baselineQuery, tenantId ? [tenantId, periodDays] : [periodDays]),
+      ]);
+
+      const cur = currentRes.rows[0] || {};
+      const base = baselineRes.rows[0] || {};
+
+      criticalDelta = (parseInt(cur.critical_count, 10) || 0) - (parseInt(base.critical_count, 10) || 0);
+      highDelta = (parseInt(cur.high_count, 10) || 0) - (parseInt(base.high_count, 10) || 0);
+      shadowDelta = (parseInt(cur.shadow_count, 10) || 0) - (parseInt(base.shadow_count, 10) || 0);
+      sensitiveDelta = (parseInt(cur.sensitive_count, 10) || 0) - (parseInt(base.sensitive_count, 10) || 0);
+      overallScoreDelta = 0;
+    }
+  } catch (err) {
+    // No baseline details available - keep deltas null
+    criticalDelta = null;
+    highDelta = null;
+    shadowDelta = null;
+    sensitiveDelta = null;
+    overallScoreDelta = null;
+  }
+
   // Generate 5-point trend across period
   const trendPoints = generateTrendPoints(overallScore, period);
 
@@ -544,17 +648,29 @@ export async function getSecurityPostureData(
       score: overallScore,
       maxScore: 100,
       level: overallLevel,
-      headline: overallScore >= 50 ? "Your AI security posture is elevated" : "Your AI security posture is stable",
-      description: `Increase in shadow agents and high-risk tools detected in the last ${period.replace("d", " days")}.`,
-      delta: 12,
-      deltaDirection: "up",
+      headline:
+        overallScore >= 75
+          ? "Your AI security posture is critical"
+          : overallScore >= 50
+          ? "Your AI security posture is elevated"
+          : overallScore >= 25
+          ? "Your AI security posture is moderate"
+          : "Your AI security posture is healthy",
+      description:
+        overallScore >= 50
+          ? `Increase in shadow agents and high-risk tools detected in the last ${period.replace("d", " days")}.`
+          : overallScore >= 25
+          ? `Multiple unmanaged shadow agents and unverified tools detected across workspaces.`
+          : `Monitored AI agents are operating within established governance boundaries.`,
+      delta: overallScoreDelta,
+      deltaDirection: overallScoreDelta && overallScoreDelta < 0 ? "down" : "up",
       deltaPeriod: "vs. previous period",
     },
     kpis: {
-      criticalRiskAgents: { value: riskDist.Critical, delta: 3, deltaPeriod: "vs. last 30 days" },
-      highRiskAgents: { value: riskDist.High, delta: 7, deltaPeriod: "vs. last 30 days" },
-      shadowAgents: { value: shadowCount, delta: 11, deltaPeriod: "vs. last 30 days" },
-      sensitiveAccess: { value: sensitiveAccessCount, delta: 4, deltaPeriod: "vs. last 30 days" },
+      criticalRiskAgents: { value: riskDist.Critical, delta: criticalDelta, deltaPeriod: `vs. last ${period.replace("d", " days")}` },
+      highRiskAgents: { value: riskDist.High, delta: highDelta, deltaPeriod: `vs. last ${period.replace("d", " days")}` },
+      shadowAgents: { value: shadowCount, delta: shadowDelta, deltaPeriod: `vs. last ${period.replace("d", " days")}` },
+      sensitiveAccess: { value: sensitiveAccessCount, delta: sensitiveDelta, deltaPeriod: `vs. last ${period.replace("d", " days")}` },
     },
     governanceCoverage: {
       totalAgents,
@@ -651,8 +767,25 @@ function formatRelativeTime(date: Date): string {
   if (diffHours === 1) return "1 hour ago";
   if (diffHours < 24) return `${diffHours} hours ago`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return "1 day ago";
-  return `${diffDays} days ago`;
+}
+
+function formatModelDisplayName(raw: string): string {
+  if (!raw || raw === "Unknown Model") return "Unknown Model";
+  const lower = raw.toLowerCase();
+  if (lower.includes("claude-3-haiku") || lower.includes("claude 3 haiku")) return "Claude 3 Haiku";
+  if (lower.includes("claude-3-5-sonnet") || lower.includes("claude 3.5 sonnet")) return "Claude 3.5 Sonnet";
+  if (lower.includes("claude-3-sonnet") || lower.includes("claude 3 sonnet")) return "Claude 3 Sonnet";
+  if (lower.includes("claude-3-opus") || lower.includes("claude 3 opus")) return "Claude 3 Opus";
+  if (lower.includes("gpt-4o")) return "GPT-4o";
+  if (lower.includes("gpt-4-turbo") || lower.includes("gpt-4 turbo")) return "GPT-4 Turbo";
+  if (lower.includes("gpt-4")) return "GPT-4";
+  if (lower.includes("gpt-3.5") || lower.includes("gpt-35")) return "GPT-3.5 Turbo";
+  if (lower.includes("gpt-5")) return "GPT-5";
+  if (lower.includes("gemini-1.5-pro") || lower.includes("gemini 1.5 pro")) return "Gemini 1.5 Pro";
+  if (lower.includes("gemini-1.5-flash") || lower.includes("gemini 1.5 flash")) return "Gemini 1.5 Flash";
+  if (lower.includes("aws-ai-agent")) return "AWS AI Agent";
+  if (lower.includes("ai-relevant")) return "AI Relevant Agent";
+  return raw;
 }
 
 function generateTrendPoints(finalScore: number, period: string) {

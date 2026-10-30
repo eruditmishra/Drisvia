@@ -58,36 +58,42 @@ export default function PostureKpiCards({ kpis, onNavigate }: Props) {
     <>
       {cards.map((card) => {
         const Icon = card.icon;
+        const hasDelta = card.delta !== null && card.delta !== undefined;
+
         return (
           <div
             key={card.id}
             onClick={() => onNavigate?.(card.targetRoute)}
-            className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group"
+            className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-4 flex flex-col justify-between hover:shadow-md hover:border-slate-300 transition-all cursor-pointer group min-h-[155px]"
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${card.iconBg} shadow-sm group-hover:scale-105 transition-transform`}>
+            <div className="flex items-center justify-between">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${card.iconBg} shadow-xs group-hover:scale-105 transition-transform`}>
                 <Icon size={18} />
               </div>
             </div>
 
-            <div>
-              <div className="text-2xl font-extrabold text-slate-900 tracking-tight leading-none mb-1">
+            <div className="my-1">
+              <div className="text-2xl font-extrabold text-slate-900 tracking-tight leading-none mb-1.5">
                 {card.value}
               </div>
-              <div className="text-xs font-semibold text-slate-600 truncate">
+              <div className="text-[12px] font-semibold text-slate-600 leading-snug line-clamp-2 min-h-[32px] flex items-center">
                 {card.label}
               </div>
             </div>
 
-            <div className="flex items-center gap-1 mt-3">
-              <span className={`text-[11px] font-bold flex items-center gap-0.5 ${card.trendColor}`}>
-                <ArrowUp size={11} strokeWidth={3} />
-                <span>{card.delta}</span>
-              </span>
-              <span className="text-[11px] text-slate-400 font-medium">
-                {card.deltaPeriod}
-              </span>
-            </div>
+            {hasDelta ? (
+              <div className="flex items-center gap-1 pt-1 border-t border-slate-50">
+                <span className={`text-[11px] font-bold flex items-center gap-0.5 ${card.trendColor}`}>
+                  <ArrowUp size={11} strokeWidth={3} />
+                  <span>{card.delta! > 0 ? `+${card.delta}` : card.delta}</span>
+                </span>
+                <span className="text-[11px] text-slate-400 font-medium truncate">
+                  {card.deltaPeriod}
+                </span>
+              </div>
+            ) : (
+              <div className="h-4" />
+            )}
           </div>
         );
       })}

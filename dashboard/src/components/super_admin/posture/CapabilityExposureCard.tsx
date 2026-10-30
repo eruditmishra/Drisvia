@@ -27,8 +27,8 @@ const iconMap: Record<string, any> = {
 
 export default function CapabilityExposureCard({ data }: Props) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[380px]">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[320px]">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Agent Capability Exposure
         </h3>
@@ -49,7 +49,7 @@ export default function CapabilityExposureCard({ data }: Props) {
               const isHigh = item.riskLevel === "High";
               return (
                 <tr key={item.capabilityId} className="hover:bg-slate-50/70 transition-colors">
-                  <td className="py-2.5">
+                  <td className="py-2">
                     <div className="flex items-center gap-2">
                       <Icon size={14} className="text-slate-500 shrink-0" />
                       <span className="font-semibold text-slate-800 text-[12px]">
@@ -57,10 +57,10 @@ export default function CapabilityExposureCard({ data }: Props) {
                       </span>
                     </div>
                   </td>
-                  <td className="py-2.5 text-center font-mono font-bold text-slate-700 text-[12px]">
+                  <td className="py-2 text-center font-mono font-bold text-slate-700 text-[12px]">
                     {item.agentCount}
                   </td>
-                  <td className="py-2.5 text-right">
+                  <td className="py-2 text-right">
                     <span
                       className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         isHigh

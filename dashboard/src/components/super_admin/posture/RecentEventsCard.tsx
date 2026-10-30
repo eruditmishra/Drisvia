@@ -10,8 +10,8 @@ export default function RecentEventsCard({ data }: Props) {
   const navigate = useNavigate();
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[320px]">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[270px]">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Recent Security Events
         </h3>
@@ -45,10 +45,10 @@ export default function RecentEventsCard({ data }: Props) {
                   onClick={() => navigate("/audit-logs")}
                   className="hover:bg-slate-50/70 transition-colors cursor-pointer"
                 >
-                  <td className="py-2.5 text-slate-500 font-medium text-[11px] whitespace-nowrap">
+                  <td className="py-2 text-slate-500 font-medium text-[11px] whitespace-nowrap">
                     {item.timeAgo}
                   </td>
-                  <td className="py-2.5">
+                  <td className="py-2">
                     <div className="flex items-center gap-1.5">
                       {isBlock ? (
                         <Slash size={13} className="text-rose-500 shrink-0" />
@@ -63,10 +63,10 @@ export default function RecentEventsCard({ data }: Props) {
                       </span>
                     </div>
                   </td>
-                  <td className="py-2.5 font-mono text-slate-600 text-[11px] truncate max-w-[140px]" title={item.agentName}>
+                  <td className="py-2 font-mono text-slate-600 text-[11px] truncate max-w-[140px]" title={item.agentName}>
                     {item.agentName}
                   </td>
-                  <td className="py-2.5 text-right">
+                  <td className="py-2 text-right">
                     <span
                       className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
                         isCrit

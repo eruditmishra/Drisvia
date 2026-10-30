@@ -32,6 +32,13 @@ export default function TopModelsCard({ data }: Props) {
         </span>
       );
     }
+    if (p.includes("aws") || m.includes("aws")) {
+      return (
+        <span className="w-5 h-5 rounded flex items-center justify-center bg-orange-50 text-orange-600 font-bold text-[10px] shrink-0 border border-orange-200/80">
+          W
+        </span>
+      );
+    }
     return (
       <span className="w-5 h-5 rounded flex items-center justify-center bg-slate-100 text-slate-600 font-bold text-[10px] shrink-0 border border-slate-200">
         AI
@@ -40,8 +47,8 @@ export default function TopModelsCard({ data }: Props) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[380px]">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-white rounded-2xl border border-slate-200/90 shadow-[0_1px_3px_rgba(0,0,0,0.04)] p-5 flex flex-col h-[320px]">
+      <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-bold text-slate-900 tracking-tight">
           Top Models by Risk
         </h3>

@@ -54,15 +54,15 @@ export interface PostureDashboardData {
     level: string;
     headline: string;
     description: string;
-    delta: number;
+    delta: number | null;
     deltaDirection: "up" | "down" | "flat";
     deltaPeriod: string;
   };
   kpis: {
-    criticalRiskAgents: { value: number; delta: number; deltaPeriod: string };
-    highRiskAgents: { value: number; delta: number; deltaPeriod: string };
-    shadowAgents: { value: number; delta: number; deltaPeriod: string };
-    sensitiveAccess: { value: number; delta: number; deltaPeriod: string };
+    criticalRiskAgents: { value: number; delta: number | null; deltaPeriod: string };
+    highRiskAgents: { value: number; delta: number | null; deltaPeriod: string };
+    shadowAgents: { value: number; delta: number | null; deltaPeriod: string };
+    sensitiveAccess: { value: number; delta: number | null; deltaPeriod: string };
   };
   governanceCoverage: {
     totalAgents: number;
