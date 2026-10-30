@@ -490,12 +490,139 @@ export async function getSecurityPostureData(
     .sort((a, b) => b.agentCount - a.agentCount)
     .slice(0, 6);
 
-  // Fetch recent agent-level security events and alerts
-  let recentEvents: any[] = [];
+  // Fetch recent violations dynamically (derived from Agent Details violation rules & posture findings)
+  const severityRank: Record<string, number> = {
+    Critical: 4,
+    High: 3,
+    Medium: 2,
+    Low: 1,
+  };
+
+  interface AgentViolation {
+    id: string;
+    agentId: string;
+    agentName: string;
+    tag: string;
+    description: string;
+    severity: "Critical" | "High" | "Medium" | "Low";
+    timeAgo: string;
+    timestamp: number;
+  }
+
+  const agentViolationsMap = new Map<string, AgentViolation>();
+
+  for (const agent of agents) {
+    const agentName = agent.name || "Unknown Agent";
+    const agentTime = new Date(agent.updated_at || agent.created_at || Date.now());
+    const timeAgoStr = formatRelativeTime(agentTime);
+    const ts = agentTime.getTime();
+
+    const isApproved = agent.status === "approved" || agent.status === "conditionally_approved";
+    const risk = calculateAgentRiskScore(agent, {
+      domains: agent.domains,
+      frameworks: agent.frameworks,
+      evidence_completeness: agent.evidence_completeness,
+    });
+
+    const agentCandidates: AgentViolation[] = [];
+
+    // Rule 1: High-risk shadow or Critical shadow (per Agent Details & posture alerts)
+    if (!isApproved && (risk.riskLevel === "Critical" || risk.riskLevel === "High")) {
+      agentCandidates.push({
+        id: `viol-${agent.id}-shadow`,
+        agentId: agent.id,
+        agentName,
+        tag: risk.riskLevel === "Critical" ? "Critical shadow" : "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: risk.riskLevel === "Critical" ? "Critical" : "High",
+        timeAgo: timeAgoStr,
+        timestamp: ts,
+      });
+    }
+
+    // Rule 2: Direct Database Access (from Agent Details)
+    if (agent.database_access) {
+      agentCandidates.push({
+        id: `viol-${agent.id}-db`,
+        agentId: agent.id,
+        agentName,
+        tag: "Database Access",
+        description: "Direct DB queries permitted, bypassing standard application tiers.",
+        severity: "High",
+        timeAgo: timeAgoStr,
+        timestamp: ts,
+      });
+    }
+
+    // Rule 3: Embedded Secrets Detected (from Agent Details)
+    if (agent.secrets_detected || agent.api_keys_detected) {
+      agentCandidates.push({
+        id: `viol-${agent.id}-secrets`,
+        agentId: agent.id,
+        agentName,
+        tag: "Secrets Exposed",
+        description: "Hardcoded secrets or credentials found in configuration payload.",
+        severity: "High",
+        timeAgo: timeAgoStr,
+        timestamp: ts,
+      });
+    }
+
+    // Rule 4: Unrestricted Internet Egress (from Agent Details)
+    if (agent.internet_access) {
+      agentCandidates.push({
+        id: `viol-${agent.id}-egress`,
+        agentId: agent.id,
+        agentName,
+        tag: "Internet Egress",
+        description: "Agent has outbound internet access enabled without firewall constraints.",
+        severity: "Medium",
+        timeAgo: timeAgoStr,
+        timestamp: ts,
+      });
+    }
+
+    // Rule 5: Local Filesystem Mount (from Agent Details)
+    if (agent.filesystem_access) {
+      agentCandidates.push({
+        id: `viol-${agent.id}-fs`,
+        agentId: agent.id,
+        agentName,
+        tag: "Filesystem Mount",
+        description: "Agent can access local filesystem directly.",
+        severity: "Medium",
+        timeAgo: timeAgoStr,
+        timestamp: ts,
+      });
+    }
+
+    // Rule 6: Unverified Foundation Model (from Agent Details & Donut spec)
+    if (agent.model_validation_status && agent.model_validation_status !== "approved") {
+      agentCandidates.push({
+        id: `viol-${agent.id}-model`,
+        agentId: agent.id,
+        agentName,
+        tag: "Unverified Model",
+        description: "Agent operates with an unapproved or unverified foundation model.",
+        severity: "Medium",
+        timeAgo: timeAgoStr,
+        timestamp: ts,
+      });
+    }
+
+    // Pick highest severity violation for this agent
+    if (agentCandidates.length > 0) {
+      agentCandidates.sort((a, b) => severityRank[b.severity] - severityRank[a.severity]);
+      agentViolationsMap.set(agent.id, agentCandidates[0]);
+    }
+  }
+
+  // Also query any active drift violations if present
   try {
     const driftQuery = `
       SELECT 
         d.id,
+        d.agent_id,
         d.detected_at,
         d.change_type,
         d.summary,
@@ -507,84 +634,89 @@ export async function getSecurityPostureData(
       LIMIT 5
     `;
     const driftRes = await db.query(driftQuery, tenantId ? [tenantId] : []);
-    if (driftRes.rows.length > 0) {
-      recentEvents = driftRes.rows.map((row) => {
-        let severity: "Critical" | "High" | "Medium" = "Medium";
-        if (row.change_type.includes("high_risk") || row.change_type.includes("escalation")) {
-          severity = "Critical";
-        } else if (row.change_type.includes("secret") || row.change_type.includes("permission")) {
-          severity = "High";
-        }
-        return {
-          id: row.id,
-          timeAgo: formatRelativeTime(new Date(row.detected_at)),
-          title: row.summary,
-          agentName: row.agent_name || "unknown-agent",
-          severity,
-        };
-      });
-    } else {
-      // Query real agent-level audit events (strictly entity_type = 'agent', NOT platform logs)
-      const auditRes = await db.query(
-        `SELECT 
-           al.id, 
-           al.created_at, 
-           al.event_type, 
-           al.summary, 
-           COALESCE(al.entity_name, da.name, 'AI Agent') as agent_name,
-           da.status as agent_status,
-           da.api_keys_detected,
-           da.secrets_detected,
-           da.database_access
-         FROM audit_logs al
-         LEFT JOIN discovered_agents da ON (al.entity_id = da.id::text OR al.entity_name = da.name)
-         WHERE al.entity_type = 'agent' 
-           AND (${tenantId ? "al.tenant_id = $1" : "al.tenant_id IS NULL"})
-         ORDER BY al.created_at DESC
-         LIMIT 5`,
-        tenantId ? [tenantId] : []
-      );
-      if (auditRes.rows.length > 0) {
-        recentEvents = auditRes.rows.map((row) => {
-          let severity: "Critical" | "High" | "Medium" = "Medium";
-          if (row.secrets_detected || row.api_keys_detected || row.database_access) {
-            severity = "High";
-          }
-          if (row.agent_status === "shadow" || !row.agent_status || row.agent_status === "unapproved") {
-            severity = "High";
-          }
-          let title = "Agent security event detected";
-          if (row.event_type === "agent.discovered") {
-            title = "Unmanaged agent discovered in estate";
-          } else if (row.event_type === "agent.updated") {
-            title = "Agent configuration & permissions re-scanned";
-          } else if (row.summary) {
-            title = row.summary;
-          }
-
-          return {
-            id: row.id,
-            timeAgo: formatRelativeTime(new Date(row.created_at)),
-            title,
-            agentName: row.agent_name || "ai-agent",
-            severity,
-          };
-        });
+    for (const row of driftRes.rows) {
+      let severity: "Critical" | "High" | "Medium" = "Medium";
+      if (row.change_type.includes("high_risk") || row.change_type.includes("escalation")) {
+        severity = "Critical";
+      } else if (row.change_type.includes("secret") || row.change_type.includes("permission") || row.change_type.includes("database")) {
+        severity = "High";
+      }
+      const tag = row.change_type
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (c: string) => c.toUpperCase());
+      const driftViolation: AgentViolation = {
+        id: row.id,
+        agentId: row.agent_id,
+        agentName: row.agent_name || "AI Agent",
+        tag,
+        description: row.summary,
+        severity,
+        timeAgo: formatRelativeTime(new Date(row.detected_at)),
+        timestamp: new Date(row.detected_at).getTime(),
+      };
+      // Overwrite or add if higher severity
+      const existing = agentViolationsMap.get(row.agent_id);
+      if (!existing || severityRank[driftViolation.severity] > severityRank[existing.severity]) {
+        agentViolationsMap.set(row.agent_id, driftViolation);
       }
     }
   } catch (e) {
-    recentEvents = [];
+    // Ignore drift table lookup error
   }
 
-  if (recentEvents.length === 0) {
-    recentEvents = [
-      { id: "ev-1", timeAgo: "2 hours ago", title: "Unmanaged shadow agent discovered", agentName: "gie-chief-orchestrator-dev", severity: "High" },
-      { id: "ev-2", timeAgo: "3 hours ago", title: "Agent sensitive tools detected", agentName: "wm-test-agent", severity: "High" },
-      { id: "ev-3", timeAgo: "5 hours ago", title: "Unverified model assigned to agent", agentName: "agent-framework-agent", severity: "Medium" },
-      { id: "ev-4", timeAgo: "8 hours ago", title: "Agent runtime permissions re-scanned", agentName: "ai-runtime-soc", severity: "Medium" },
-      { id: "ev-5", timeAgo: "1 day ago", title: "Missing owner and controls flagged", agentName: "Test-agent-wm", severity: "Medium" },
+  // Sort all unique agent violations by severity rank then timestamp
+  let recentViolations = Array.from(agentViolationsMap.values())
+    .sort((a, b) => {
+      const rankDiff = severityRank[b.severity] - severityRank[a.severity];
+      if (rankDiff !== 0) return rankDiff;
+      return b.timestamp - a.timestamp;
+    })
+    .slice(0, 3);
+
+  // Fallback to baseline violations if none found
+  if (recentViolations.length === 0) {
+    recentViolations = [
+      {
+        id: "viol-1",
+        agentId: "agent-1",
+        agentName: "gie-chief-orchestrator-dev (AI)",
+        tag: "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: "High",
+        timeAgo: "2 hours ago",
+        timestamp: Date.now() - 7200000,
+      },
+      {
+        id: "viol-2",
+        agentId: "agent-2",
+        agentName: "gie-knowledge-intelligence-dev (AI)",
+        tag: "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: "High",
+        timeAgo: "4 hours ago",
+        timestamp: Date.now() - 14400000,
+      },
+      {
+        id: "viol-3",
+        agentId: "agent-3",
+        agentName: "gie-learning-intelligence-dev (AI)",
+        tag: "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: "High",
+        timeAgo: "6 hours ago",
+        timestamp: Date.now() - 21600000,
+      },
     ];
   }
+
+  // Map to recentEvents for backwards compatibility
+  const recentEvents = recentViolations.map((v) => ({
+    id: v.id,
+    timeAgo: v.timeAgo,
+    title: `${v.tag}: ${v.description}`,
+    agentName: v.agentName,
+    severity: v.severity,
+  }));
 
   // Calculate actual delta details - only keep if actual details exist in historical baseline
   const periodDays = period === "7d" ? 7 : period === "90d" ? 90 : 30;
@@ -769,6 +901,7 @@ export async function getSecurityPostureData(
       { modelName: "GPT-3.5 Turbo", provider: "OpenAI", agentCount: 10, riskLevel: "Low" },
     ],
     riskScoreTrend: trendPoints,
+    recentViolations,
     recentEvents,
     environments: {
       totalAgents,
@@ -912,12 +1045,39 @@ function generateBaselinePostureData(period: string, environment: string) {
       { modelName: "GPT-3.5 Turbo", provider: "OpenAI", agentCount: 10, riskLevel: "Low" },
     ],
     riskScoreTrend: trendPoints,
+    recentViolations: [
+      {
+        id: "viol-1",
+        agentId: "agent-1",
+        agentName: "gie-chief-orchestrator-dev (AI)",
+        tag: "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: "High",
+        timeAgo: "2 hours ago",
+      },
+      {
+        id: "viol-2",
+        agentId: "agent-2",
+        agentName: "gie-knowledge-intelligence-dev (AI)",
+        tag: "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: "High",
+        timeAgo: "4 hours ago",
+      },
+      {
+        id: "viol-3",
+        agentId: "agent-3",
+        agentName: "gie-learning-intelligence-dev (AI)",
+        tag: "High-risk shadow",
+        description: "Shadow agent detected without governance registration.",
+        severity: "High",
+        timeAgo: "6 hours ago",
+      },
+    ],
     recentEvents: [
-      { id: "ev-1", timeAgo: "2 hours ago", title: "New high-risk agent discovered", agentName: "gie-integration-intelligence-dev", severity: "Critical" },
-      { id: "ev-2", timeAgo: "3 hours ago", title: "Agent gained secrets access", agentName: "finance-assistant", severity: "High" },
-      { id: "ev-3", timeAgo: "5 hours ago", title: "Shadow agent detected", agentName: "customer-support", severity: "Medium" },
-      { id: "ev-4", timeAgo: "8 hours ago", title: "Guardrail configuration missing", agentName: "hr-assistant", severity: "Medium" },
-      { id: "ev-5", timeAgo: "1 day ago", title: "Unapproved model in use", agentName: "sales-assistant", severity: "Medium" },
+      { id: "ev-1", timeAgo: "2 hours ago", title: "High-risk shadow: Shadow agent detected without governance registration.", agentName: "gie-chief-orchestrator-dev (AI)", severity: "High" },
+      { id: "ev-2", timeAgo: "4 hours ago", title: "High-risk shadow: Shadow agent detected without governance registration.", agentName: "gie-knowledge-intelligence-dev (AI)", severity: "High" },
+      { id: "ev-3", timeAgo: "6 hours ago", title: "High-risk shadow: Shadow agent detected without governance registration.", agentName: "gie-learning-intelligence-dev (AI)", severity: "High" },
     ],
     environments: {
       totalAgents,

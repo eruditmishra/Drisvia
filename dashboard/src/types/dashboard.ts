@@ -108,7 +108,16 @@ export interface PostureDashboardData {
     date: string;
     score: number;
   }>;
-  recentEvents: Array<{
+  recentViolations: Array<{
+    id: string;
+    agentId?: string;
+    agentName: string;
+    tag: string;
+    description: string;
+    severity: "Critical" | "High" | "Medium" | "Low";
+    timeAgo?: string;
+  }>;
+  recentEvents?: Array<{
     id: string;
     timeAgo: string;
     title: string;

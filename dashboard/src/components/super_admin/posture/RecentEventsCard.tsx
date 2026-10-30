@@ -6,7 +6,7 @@ interface Props {
   data: PostureDashboardData["recentEvents"];
 }
 
-export default function RecentEventsCard({ data }: Props) {
+export default function RecentEventsCard({ data = [] }: Props) {
   const navigate = useNavigate();
 
   return (

@@ -14,7 +14,7 @@ import CapabilityExposureCard from "../../components/super_admin/posture/Capabil
 import OwaspFrameworkCard from "../../components/super_admin/posture/OwaspFrameworkCard";
 import TopModelsCard from "../../components/super_admin/posture/TopModelsCard";
 import RiskScoreTrendCard from "../../components/super_admin/posture/RiskScoreTrendCard";
-import RecentEventsCard from "../../components/super_admin/posture/RecentEventsCard";
+import RecentViolationsCard from "../../components/super_admin/posture/RecentViolationsCard";
 import EnvironmentsCard from "../../components/super_admin/posture/EnvironmentsCard";
 
 export default function Dashboard() {
@@ -134,7 +134,7 @@ export default function Dashboard() {
           period={period}
           onPeriodChange={(newPeriod) => setPeriod(newPeriod)}
         />
-        <RecentEventsCard data={data.recentEvents} />
+        <RecentViolationsCard data={data.recentViolations} />
         <EnvironmentsCard
           data={data.environments}
           onSelectEnvironment={(env) => {

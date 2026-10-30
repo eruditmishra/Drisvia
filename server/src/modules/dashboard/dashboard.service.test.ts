@@ -51,9 +51,15 @@ describe("getSecurityPostureData", () => {
     expect(data.riskScoreTrend).toBeDefined();
     expect(data.riskScoreTrend.length).toBe(5);
 
-    // 10. Recent Events
+    // 10. Recent Events & Recent Violations
     expect(data.recentEvents).toBeDefined();
     expect(data.recentEvents.length).toBeGreaterThanOrEqual(1);
+    expect(data.recentViolations).toBeDefined();
+    expect(data.recentViolations.length).toBeGreaterThanOrEqual(1);
+    expect(data.recentViolations[0]).toHaveProperty("agentName");
+    expect(data.recentViolations[0]).toHaveProperty("tag");
+    expect(data.recentViolations[0]).toHaveProperty("description");
+    expect(data.recentViolations[0]).toHaveProperty("severity");
 
     // 11. Environments
     expect(data.environments).toBeDefined();
